@@ -7,7 +7,7 @@ Everything here is free and open source. Moving to a paid server and domain late
 ## How it's built
 
 ```
-app/
+bde-sales-tracker/
   server/   API: Node.js + Express + TypeScript, Prisma, MySQL
   web/      Screens: React + Vite (Direction H "Minimal" design)
   docs/     DECISIONS.md (business rules), API.md (every endpoint), DEPLOY.md
@@ -21,41 +21,154 @@ The web app only talks to the server through `web/src/api/`. A new design can re
 | Web | react, react-dom, react-router-dom, vite |
 | Database | MySQL 8 Community |
 
-## Run it on your computer
+## Setup for the team
 
-You need Node.js 20 or newer and MySQL 8.
+Follow these steps once on your own computer. It takes about 15 minutes. Commands are for **Windows PowerShell**; Mac/Linux equivalents are noted where they differ.
 
-**1. Database (once).** In MySQL, as root:
+### What you need installed
+
+| Tool | Version | Check with | Get it |
+|---|---|---|---|
+| Git | any recent | `git --version` | https://git-scm.com |
+| Node.js | 20 or newer (LTS) | `node --version` | https://nodejs.org |
+| MySQL Server | 8.x Community | `mysql --version` | https://dev.mysql.com/downloads/installer/ (choose "Server only" or "Developer Default") |
+
+Remember the MySQL **root password** you set during install. You need it once in step 3.
+
+### 1. Get the code
+
+```powershell
+git clone https://github.com/Subramaniyajothi6/bde-sales-tracker.git
+cd bde-sales-tracker
+```
+
+### 2. Make sure MySQL is running
+
+Open **PowerShell as Administrator** (right-click → Run as administrator):
+
+```powershell
+net start MYSQL80
+```
+
+"The requested service has already been started" is fine. If the name is different on your PC, find it with `Get-Service *mysql*`.
+(Mac: `brew services start mysql`. Linux: `sudo systemctl start mysql`.)
+
+### 3. Create the database (once)
+
+Open the MySQL command line as root. If `mysql` isn't recognised, use the full path, e.g. `& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe"`.
+
+```powershell
+mysql -u root -p
+```
+
+Then paste this, replacing `choose-a-password` with a password for the app (keep it, you need it in step 4):
 
 ```sql
 CREATE DATABASE bde_tracker CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER 'bde_app'@'localhost' IDENTIFIED BY 'choose-a-password';
 GRANT ALL PRIVILEGES ON bde_tracker.* TO 'bde_app'@'localhost';
+EXIT;
 ```
 
-**2. Server settings.** Copy `server/.env.example` to `server/.env` and fill it in (database password, a random `JWT_SECRET`, the first admin password). For demo data set `SEED_SAMPLE_DATA=true`.
+Prefer clicking? In **MySQL Workbench**, connect as root, paste the same lines into a query tab and press ⚡.
 
-**3. Install, create tables, add first data:**
+### 4. Create your settings file
 
-```bash
+```powershell
 cd server
+Copy-Item .env.example .env        # Mac/Linux: cp .env.example .env
+```
+
+Generate a secret for logins:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+```
+
+Open `server/.env` in your editor and set:
+
+| Setting | Value |
+|---|---|
+| `DATABASE_URL` | `mysql://bde_app:choose-a-password@localhost:3306/bde_tracker` (your password from step 3) |
+| `JWT_SECRET` | the long string printed above |
+| `SEED_ADMIN_PASSWORD` | any password for the `ADMIN-01` account, 8+ characters |
+| `SEED_SAMPLE_DATA` | `true` to get 30 sample BDEs with calls, leads and payments to play with |
+
+Leave the rest as it is. **Never commit `.env`**; git already ignores it.
+
+> If your app password contains `@`, `:`, `/` or `#`, it must be URL-encoded inside `DATABASE_URL` (e.g. `@` becomes `%40`). Easiest: use only letters and numbers.
+
+### 5. Install and fill the database
+
+Still in `server/`:
+
+```powershell
 npm install
-npm run db:deploy     # creates the tables
-npm run db:seed       # ADMIN-01, courses, and sample data if switched on
-cd ../web
+npm run db:deploy      # creates the tables
+npm run db:seed        # creates ADMIN-01, the courses, and sample data if switched on
+```
+
+Then the web app:
+
+```powershell
+cd ..\web              # Mac/Linux: cd ../web
 npm install
 ```
 
-**4. Start both (two terminals):**
+### 6. Start it
 
-```bash
-cd server && npm run dev     # API on http://localhost:4000
-cd web && npm run dev        # app on http://localhost:5173
+Two terminals, both left running:
+
+```powershell
+# Terminal 1
+cd server
+npm run dev            # API on http://localhost:4000
 ```
 
-Open http://localhost:5173 and sign in as `ADMIN-01` with the password from `.env`. With sample data, BDEs are `BDE-001` to `BDE-030` with password `Bde@12345`.
+```powershell
+# Terminal 2
+cd web
+npm run dev            # app on http://localhost:5173
+```
 
-To open it on a phone on the same Wi-Fi, run `npm run dev -- --host` in `web/` and open the "Network" address it prints.
+### 7. Sign in
+
+Open **http://localhost:5173**.
+
+| Role | Employee ID | Password |
+|---|---|---|
+| Admin | `ADMIN-01` | your `SEED_ADMIN_PASSWORD` from `.env` |
+| BDE (sample data) | `BDE-001` to `BDE-030` | `Bde@12345` |
+
+`BDE-014` (Karthik R.) has the most sample leads, interviews and payments. To see BDE screens at phone size, press `F12` then `Ctrl + Shift + M`. To use admin and BDE at the same time, sign in to one of them in a private/incognito window.
+
+**Check everything works (optional):** with the API running, in `server/` run `npm run check:api`. It should end with `68 passed, 0 failed`. It adds test records, so only use it on your own development database.
+
+### On a phone
+
+Run the web app with `npm run dev -- --host` in `web/`, then open the "Network" address it prints (like `http://192.168.1.20:5173`) on a phone connected to the same Wi-Fi. Allow Node.js through Windows Firewall if asked.
+
+### Working together
+
+- **Before you start work:** `git pull`. If `package.json` changed, run `npm install` in that folder. If there's a new folder in `server/prisma/migrations`, run `npm run db:deploy` in `server/`.
+- **Work on a branch:** `git checkout -b your-change`, push it, and open a pull request on GitHub.
+- **Changing the database design:** edit `server/prisma/schema.prisma`, then run `npm run db:migrate` and give the change a short name. Commit the new migration folder together with your code.
+  This needs extra MySQL rights on your own computer only: as root, run
+  `GRANT CREATE, DROP, ALTER, INDEX, REFERENCES ON *.* TO 'bde_app'@'localhost';`
+- **Start over with fresh sample data:** `npm run db:reset` in `server/`. This deletes everything in your local database.
+
+### Problems?
+
+| What you see | Fix |
+|---|---|
+| `Can't reach database server at localhost:3306` (P1001) | MySQL isn't running. Do step 2. |
+| `Access denied for user 'bde_app'` | The password in `DATABASE_URL` doesn't match step 3, or it has special characters that need encoding. |
+| `Invalid settings in .env` when starting the API | A setting is missing or too short. `JWT_SECRET` must be at least 32 characters. |
+| `Set SEED_ADMIN_PASSWORD` when seeding | Add `SEED_ADMIN_PASSWORD` (8+ characters) to `server/.env`. |
+| `EADDRINUSE: address already in use :::4000` | The API is already running in another terminal. Close it, or set `PORT=4001` in `.env`. |
+| Sign in fails with "Request failed (500)", or pages show "Couldn't load this" | Terminal 1 (the API) isn't running, or it stopped with an error. Check that terminal. |
+| "Too many wrong passwords" | 10 wrong tries locks that ID for 15 minutes. Restarting the API clears it. |
+| `prisma migrate dev` fails with a shadow database error | Give `bde_app` the extra rights shown under "Working together". |
 
 ## Useful commands
 
