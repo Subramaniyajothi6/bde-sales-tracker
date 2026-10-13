@@ -1,0 +1,213 @@
+// Database design for the BDE Team Management & Sales Tracking app.
+// See docs/DECISIONS.md for why the tables look like this.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  BDE
+}
+
+enum CourseType {
+  COURSE
+  INTERNSHIP
+}
+
+enum LeadStage {
+  INTERESTED
+  FOLLOW_UP
+  INTERVIEW_SCHEDULED
+  SELECTED
+  PAYMENT_COMMITTED
+  PAID
+  NOT_INTERESTED
+}
+
+enum CallOutcome {
+  INTERESTED
+  CALL_BACK
+  NOT_INTERESTED
+  NO_ANSWER
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  ATTENDED
+  NO_SHOW
+}
+
+enum InterviewResult {
+  SELECTED
+  NOT_SELECTED
+}
+
+enum PaymentStatus {
+  PROMISED
+  PARTIALLY_PAID
+  PAID
+}
+
+enum ReceiptCheck {
+  TO_VERIFY
+  VERIFIED
+  REJECTED
+}
+
+/// Admins and BDEs. Nobody is deleted: deactivated users keep their history.
+model User {
+  id                 Int       @id @default(autoincrement())
+  employeeId         String    @unique @db.VarChar(20)
+  name               String    @db.VarChar(100)
+  phone              String    @db.VarChar(20)
+  email              String?   @db.VarChar(150)
+  role               Role      @default(BDE)
+  passwordHash       String    @db.VarChar(100)
+  mustChangePassword Boolean   @default(true)
+  /// Raised on password reset or deactivation so old logins stop working.
+  tokenVersion       Int       @default(0)
+  active             Boolean   @default(true)
+  dailyTarget        Int       @default(80)
+  joinedOn           DateTime  @db.Date
+  lastLoginAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  leads       Lead[]       @relation("LeadOwner")
+  notes       LeadNote[]
+  calls       CallLog[]
+  reports     DailyReport[]
+  interviews  Interview[]  @relation("InterviewCreator")
+  payments    Payment[]    @relation("PaymentRecorder")
+  verified    Payment[]    @relation("PaymentVerifier")
+}
+
+model Course {
+  id     Int        @id @default(autoincrement())
+  name   String     @db.VarChar(120)
+  type   CourseType
+  /// Full fee in whole rupees
+  fee    Int
+  active Boolean    @default(true)
+  leads  Lead[]
+}
+
+/// A candidate. One phone number belongs to one lead.
+model Lead {
+  id         Int       @id @default(autoincrement())
+  name       String    @db.VarChar(100)
+  /// Last 10 digits only, so +91 98765 43210 and 9876543210 match
+  phone      String    @unique @db.VarChar(10)
+  courseId   Int
+  ownerId    Int
+  stage      LeadStage @default(INTERESTED)
+  followUpOn DateTime? @db.Date
+  nextAction String?   @db.VarChar(200)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  course     Course      @relation(fields: [courseId], references: [id])
+  owner      User        @relation("LeadOwner", fields: [ownerId], references: [id])
+  notes      LeadNote[]
+  interviews Interview[]
+  payments   Payment[]
+
+  @@index([ownerId, stage])
+  @@index([followUpOn])
+}
+
+model LeadNote {
+  id        Int      @id @default(autoincrement())
+  leadId    Int
+  authorId  Int
+  text      String   @db.VarChar(500)
+  createdAt DateTime @default(now())
+
+  lead   Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+
+  @@index([leadId])
+}
+
+/// One row per call a BDE logs. Daily report numbers are counted from these.
+model CallLog {
+  id       Int         @id @default(autoincrement())
+  bdeId    Int
+  outcome  CallOutcome
+  calledAt DateTime    @default(now())
+  /// India date the call belongs to
+  workDate DateTime    @db.Date
+
+  bde User @relation(fields: [bdeId], references: [id])
+
+  @@index([bdeId, workDate])
+  @@index([workDate])
+}
+
+/// Marks a day's report as sent. Numbers come from CallLog.
+model DailyReport {
+  id          Int       @id @default(autoincrement())
+  bdeId       Int
+  workDate    DateTime  @db.Date
+  submittedAt DateTime?
+
+  bde User @relation(fields: [bdeId], references: [id])
+
+  @@unique([bdeId, workDate])
+}
+
+model Interview {
+  id          Int              @id @default(autoincrement())
+  leadId      Int
+  createdById Int
+  scheduledAt DateTime
+  status      InterviewStatus  @default(SCHEDULED)
+  result      InterviewResult?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  lead      Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  createdBy User @relation("InterviewCreator", fields: [createdById], references: [id])
+
+  @@index([scheduledAt])
+}
+
+/// A promise to pay (PROMISED) or money received (PARTIALLY_PAID / PAID).
+model Payment {
+  id           Int           @id @default(autoincrement())
+  leadId       Int
+  recordedById Int
+  /// Whole rupees
+  amount       Int
+  status       PaymentStatus
+  /// Date paid, or the date the candidate promised to pay
+  date         DateTime      @db.Date
+  note         String?       @db.VarChar(300)
+
+  // Receipt, required for money received
+  receiptKey   String?       @db.VarChar(200)
+  receiptName  String?       @db.VarChar(200)
+  receiptType  String?       @db.VarChar(80)
+  check        ReceiptCheck?
+  rejectReason String?       @db.VarChar(200)
+  verifiedById Int?
+  verifiedAt   DateTime?
+
+  /// For promises: set when money arrives, so it leaves the "promised" list
+  closedAt     DateTime?
+  createdAt    DateTime      @default(now())
+
+  lead       Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  recordedBy User  @relation("PaymentRecorder", fields: [recordedById], references: [id])
+  verifiedBy User? @relation("PaymentVerifier", fields: [verifiedById], references: [id])
+
+  @@index([leadId])
+  @@index([date])
+  @@index([check])
+}

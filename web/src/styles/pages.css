@@ -1,0 +1,97 @@
+/* Page-level styles carried over from the Direction H design files. */
+
+/* Sign in */
+.signin { min-height: 100vh; display: flex; flex-direction: column; padding: 32px 40px; background: var(--ground); }
+.signin .inner { margin: auto; width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 18px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 32px; }
+.signin h1 { font-size: 26px; font-weight: 600; margin: 0; letter-spacing: -.01em; }
+.signin .lede { margin: 4px 0 0; color: var(--soft); }
+.signin form { display: flex; flex-direction: column; gap: 16px; }
+.signin .foot { font-size: 12.5px; color: var(--faint); }
+.pw { position: relative; display: block; }
+.pw .input { padding-right: 70px; }
+.pw button { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
+@media (max-width: 600px) { .signin { padding: 20px 16px; } .signin .inner { padding: 24px 20px; } }
+
+/* BDE: today */
+.scoreline { display: flex; align-items: flex-end; gap: 12px; margin-top: 12px; }
+.scoreline .total { font-size: 48px; font-weight: 600; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.scoreline .tgt { font-size: 14px; color: var(--soft); padding-bottom: 4px; line-height: 1.4; }
+.scoreline .tgt b { color: var(--ink); }
+.meter { height: 6px; border-radius: 999px; background: var(--line-2); overflow: hidden; margin-top: 14px; }
+.meter i { display: block; height: 100%; background: var(--primary); transition: width .25s; }
+.log-row { display: flex; align-items: center; gap: 12px; padding: 0 8px 0 14px; min-height: 52px; border-top: 1px solid var(--line); }
+.log-row:first-child { border-top: 0; }
+.log-row .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.log-row .t { color: var(--soft); font-size: 14px; width: 64px; flex-shrink: 0; }
+.log-row .what { flex: 1; font-weight: 600; }
+.submitted { display: flex; align-items: center; gap: 10px; background: var(--green-tint); color: var(--green); border-radius: 8px; padding: 12px 14px; font-weight: 500; }
+
+/* BDE: lead */
+.contact { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+.contact a { min-height: 50px; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; text-decoration: none; }
+.contact .call { background: var(--primary); color: #fff; }
+.contact .wa { background: #fff; color: var(--ink); border: 1px solid #CDD3DC; }
+
+/* BDE: interviews */
+.iv { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.iv-top { display: flex; gap: 12px; align-items: flex-start; }
+.iv-when { background: var(--primary-tint); color: var(--primary); border-radius: 8px; padding: 8px 10px; text-align: center; min-width: 70px; flex-shrink: 0; }
+.iv-when .digits { font-size: 18px; display: block; line-height: 1.2; color: var(--primary); }
+.iv-when small { font-size: 12px; color: var(--soft); }
+.iv-acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+
+/* BDE: header number boxes (payments, record payment) */
+.boxes { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin-top: 14px; }
+.boxes div { background: #FAFBFC; padding: 10px 12px; }
+.boxes .digits { font-size: 20px; display: block; line-height: 1.15; }
+.boxes small { color: var(--soft); font-size: 12.5px; }
+.boxes .good .digits { color: var(--green); }
+.boxes .warn .digits { color: var(--amber); }
+
+/* BDE: record payment */
+.money { display: flex; align-items: center; border: 1px solid #CDD3DC; border-radius: 6px; background: #fff; padding: 0 12px; min-height: 46px; }
+.money:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(29, 78, 216, .15); }
+.money span { font-weight: 500; color: var(--soft); }
+.money input { border: 0; outline: none; width: 100%; padding-left: 6px; font-size: 18px; font-weight: 600; background: transparent; min-height: 44px; }
+.seg3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid #CDD3DC; border-radius: 6px; overflow: hidden; }
+.seg3 button { border: 0; background: #fff; min-height: 44px; font-weight: 500; color: var(--soft); cursor: pointer; }
+.seg3 button + button { border-left: 1px solid var(--line); }
+.seg3 button[aria-pressed="true"] { background: var(--primary-tint); color: var(--primary); font-weight: 600; }
+.savebar { position: sticky; bottom: 82px; background: var(--ground); padding: 10px 0 4px; display: flex; flex-direction: column; gap: 6px; }
+
+/* BDE: month */
+.rankline { display: flex; align-items: flex-end; gap: 12px; margin-top: 12px; }
+.rankline .digits { font-size: 44px; line-height: 1; color: var(--ink); }
+.rankline span:last-child { color: var(--soft); padding-bottom: 2px; line-height: 1.4; }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.stat .digits { font-size: 22px; display: block; line-height: 1.1; }
+.stat small { color: var(--soft); }
+
+/* BDE: profile */
+.avatar { width: 56px; height: 56px; border-radius: 50%; background: var(--primary-tint); color: var(--primary); font-size: 20px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-top: 14px; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 10px 16px; margin: 0; }
+.facts dt { color: var(--soft); }
+.facts dd { margin: 0; font-weight: 500; }
+
+/* Shared bits used by React pages */
+.form-col { display: flex; flex-direction: column; gap: 12px; }
+.info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.info-grid .muted { font-size: 13px; }
+.info-grid div > div:last-child { font-weight: 600; }
+.receipt-view { flex: 1 1 320px; min-height: 320px; border-radius: 10px; background: #F5F7FA; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: var(--soft); overflow: hidden; }
+.receipt-view img { max-width: 100%; max-height: 60vh; object-fit: contain; }
+.receipt-view iframe { width: 100%; height: 60vh; border: 0; }
+.temp-pw { background: var(--line-2); border-radius: 8px; padding: 16px; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; }
+.temp-pw b { font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.linkbtn.inline { padding: 0; min-height: 0; }
+a.list-row { cursor: pointer; }
+
+/* Use the available width: no narrow cap on big screens, and tables that
+   shrink to fit next to a side panel instead of being cut off. */
+.wrap, .band-in { max-width: 1680px; }
+.grow { flex-basis: 560px; }
+table.data { min-width: 560px; }
+table.data td.num, table.data th.num { white-space: nowrap; }
+/* Wide tables with many text columns keep a usable width and scroll on small screens */
+.panel:not(.grow) > .scroll > table.data { min-width: 760px; }
