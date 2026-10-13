@@ -76,6 +76,7 @@ Also back up the `uploads` folder.
 
 - [ ] `SEED_SAMPLE_DATA=false`. Never put sample data in the live database.
 - [ ] New `JWT_SECRET` and a strong admin password; change the admin password after first login.
-- [ ] HTTPS working; `NODE_ENV=production`.
+- [ ] HTTPS working; `NODE_ENV=production`. HTTPS is also what lets BDEs **install the app** on their phones (Android shows "Install"; iPhone uses Share > Add to Home Screen). On plain `http://` over the office network the app works in the browser but can't be installed.
+- [ ] `LATE_AFTER` in `server/.env` matches office start time (default `10:00`).
 - [ ] Daily backups running and one restore tested.
 - [ ] Team has agreed the rules in `docs/DECISIONS.md` (especially #3, part payments).

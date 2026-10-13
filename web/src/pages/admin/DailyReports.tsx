@@ -26,13 +26,13 @@ export default function DailyReports() {
   const [period, setPeriod] = useState<Period>('day');
   const [anchor, setAnchor] = useState(todayIST());
   const [q, setQ] = useState('');
-  const [show, setShow] = useState(params.get('show') === 'missing' ? 'missing' : 'all');
+  const [show, setShow] = useState(['missing', 'not-started', 'below'].find(s => s === params.get('show')) ?? 'all');
   const r = rangeOf(period, anchor);
   const { data, error, reload } = useLoad(() => api.dailyReports.list(r.from, r.to), [r.from, r.to]);
 
   const rows = useMemo(() => (data?.rows ?? []).filter(x =>
     (!q || x.bde.name.toLowerCase().includes(q.toLowerCase()) || x.bde.employeeId.toLowerCase().includes(q.toLowerCase()))
-    && (show === 'all' || (show === 'missing' ? x.status !== 'SENT' : x.total < x.target))), [data, q, show]);
+    && (show === 'all' || (show === 'missing' ? x.status !== 'SENT' : show === 'not-started' ? x.total === 0 && x.status !== 'ON_LEAVE' : x.total < x.target))), [data, q, show]);
   const all = data?.rows ?? [];
   const sum = (k: 'INTERESTED' | 'CALL_BACK' | 'NOT_INTERESTED' | 'NO_ANSWER') => rows.reduce((t, x) => t + x.counts[k], 0);
   const isNow = r.to >= todayIST();
@@ -67,7 +67,7 @@ export default function DailyReports() {
             <input className="input search" id="q" type="search" placeholder="Find a BDE by name or ID" value={q} onChange={e => setQ(e.target.value)} />
             <label className="sr-only" htmlFor="show">Show</label>
             <select className="select" id="show" value={show} onChange={e => setShow(e.target.value)}>
-              <option value="all">Everyone</option><option value="missing">Not sent</option><option value="below">Below target</option>
+              <option value="all">Everyone</option><option value="missing">Not sent</option><option value="not-started">No calls yet</option><option value="below">Below target</option>
             </select>
           </div>
           {error ? <ErrorNote error={error} onRetry={reload} /> : !data ? <Loading /> : (
@@ -84,7 +84,7 @@ export default function DailyReports() {
                     const p = Math.min(100, (x.total / (x.target || 1)) * 100);
                     return (
                       <tr key={x.bde.id} className="click" tabIndex={0} onClick={() => nav(`/admin/bde/${x.bde.id}`)} onKeyDown={e => { if (e.key === 'Enter') nav(`/admin/bde/${x.bde.id}`); }}>
-                        <td className="who"><b>{x.bde.name}</b></td>
+                        <td className="who"><b>{x.bde.name}</b>{x.note && <small className="report-note" title={x.note}>Note: {x.note}</small>}</td>
                         <td><Badge label={REPORT_LABEL[x.status]} />{period !== 'day' && <small className="muted"> {x.sentDays}/{x.dueDays}</small>}</td>
                         <td className="num">{x.counts.INTERESTED}</td><td className="num">{x.counts.CALL_BACK}</td>
                         <td className="num">{x.counts.NOT_INTERESTED}</td><td className="num">{x.counts.NO_ANSWER}</td>

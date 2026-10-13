@@ -21,6 +21,9 @@ import BdePayments from './pages/bde/Payments';
 import RecordPayment from './pages/bde/RecordPayment';
 import Month from './pages/bde/Month';
 import Profile from './pages/bde/Profile';
+import Attendance from './pages/admin/Attendance';
+import Activity from './pages/admin/Activity';
+import ChatPage from './pages/Chat';
 
 /** Only for the given role. Sends everyone else to login or their own home. */
 function Only({ role, children }: { role: Role; children: ReactNode }) {
@@ -69,6 +72,10 @@ export default function App() {
         <Route path="reports" element={<Reports />} />
         <Route path="team" element={<Team />} />
         <Route path="bde/:id" element={<BdeDetail />} />
+        <Route path="attendance" element={<Attendance />} />
+        <Route path="activity" element={<Activity />} />
+        <Route path="chat" element={<ChatPage role="admin" />} />
+        <Route path="chat/:id" element={<ChatPage role="admin" />} />
       </Route>
 
       <Route path="/bde" element={<Only role="BDE"><BdeShell /></Only>}>
@@ -80,6 +87,8 @@ export default function App() {
         <Route path="payments/new" element={<RecordPayment />} />
         <Route path="me" element={<Month />} />
         <Route path="me/profile" element={<Profile />} />
+        <Route path="chat" element={<ChatPage role="bde" />} />
+        <Route path="chat/:id" element={<ChatPage role="bde" />} />
       </Route>
 
       <Route path="*" element={<Home />} />

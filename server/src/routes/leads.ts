@@ -7,16 +7,25 @@ import { isAdmin, me } from '../lib/auth.js';
 import { normalizePhone, formatPhone } from '../lib/phone.js';
 import { dateOnly, todayIST, ymd } from '../lib/time.js';
 import { userRef } from '../lib/present.js';
+import { logActivity } from '../lib/activity.js';
 
 export const leads = Router();
 
-export const STAGES = ['INTERESTED', 'FOLLOW_UP', 'INTERVIEW_SCHEDULED', 'SELECTED', 'PAYMENT_COMMITTED', 'PAID', 'NOT_INTERESTED'] as const;
+export const STAGES = ['NEW', 'INTERESTED', 'FOLLOW_UP', 'INTERVIEW_SCHEDULED', 'SELECTED', 'PAYMENT_COMMITTED', 'PAID', 'NOT_INTERESTED'] as const;
 export const STAGE_LABEL: Record<(typeof STAGES)[number], string> = {
-  INTERESTED: 'Interested', FOLLOW_UP: 'Follow-up', INTERVIEW_SCHEDULED: 'Interview scheduled',
+  NEW: 'New', INTERESTED: 'Interested', FOLLOW_UP: 'Follow-up', INTERVIEW_SCHEDULED: 'Interview scheduled',
   SELECTED: 'Selected', PAYMENT_COMMITTED: 'Payment committed', PAID: 'Paid', NOT_INTERESTED: 'Not interested'
 };
 const CLOSED = ['PAID', 'NOT_INTERESTED'] as const;
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-10-12');
+
+/** A new or changed follow-up date can't be in the past. */
+function checkFollowUp(date: string | null | undefined) {
+  if (date && date < todayIST()) throw new HttpError(400, 'Choose today or a later date for the follow-up');
+}
+// These two statuses follow real events: an interview booked, and the full fee verified
+const NEEDS_INTERVIEW = 'Book the interview to set "Interview scheduled"';
+const NEEDS_PAYMENT = 'A lead becomes Paid by itself when the admin verifies the full fee';
 
 /** Loads a lead the user may see: admins see all, BDEs only their own. */
 export async function leadFor(req: Request, id: number) {
@@ -116,6 +125,10 @@ leads.post('/', async (req, res) => {
       { leadId: mine || isAdmin(req) ? existing.id : undefined });
   }
 
+  if (b.stage === 'INTERVIEW_SCHEDULED') throw new HttpError(400, NEEDS_INTERVIEW);
+  if (b.stage === 'PAID') throw new HttpError(400, NEEDS_PAYMENT);
+  checkFollowUp(b.followUpOn);
+
   const course = await db.course.findUnique({ where: { id: b.courseId } });
   if (!course || !course.active) throw new HttpError(400, 'Choose a course or internship');
 
@@ -136,6 +149,7 @@ leads.post('/', async (req, res) => {
     },
     include: { course: true, owner: true }
   });
+  logActivity(me(req).id, 'LEAD_ADDED', `${lead.name}, ${lead.course.name}${isAdmin(req) ? ` for ${lead.owner.name}` : ''}`);
   res.status(201).json({ lead: leadOut(lead) });
 });
 
@@ -170,16 +184,27 @@ leads.patch('/:id', async (req, res) => {
   const notes: string[] = [];
   const data: Prisma.LeadUncheckedUpdateInput = {};
   if (b.name !== undefined) data.name = b.name;
+  let fee = lead.course.fee;
   if (b.courseId !== undefined && b.courseId !== lead.courseId) {
     const course = await db.course.findUnique({ where: { id: b.courseId } });
     if (!course) throw new HttpError(400, 'Choose a course or internship');
     data.courseId = course.id;
+    fee = course.fee;
     notes.push(`Course changed to ${course.name}`);
   }
   if (b.stage && b.stage !== lead.stage) {
+    if (b.stage === 'INTERVIEW_SCHEDULED' && !(await db.interview.count({ where: { leadId: lead.id, status: 'SCHEDULED' } }))) {
+      throw new HttpError(400, NEEDS_INTERVIEW);
+    }
+    if (b.stage === 'PAID') {
+      const verified = await db.payment.aggregate({ where: { leadId: lead.id, check: 'VERIFIED' }, _sum: { amount: true } });
+      if ((verified._sum.amount ?? 0) < fee) throw new HttpError(400, NEEDS_PAYMENT);
+    }
     data.stage = b.stage;
     notes.push(`Status changed from ${STAGE_LABEL[lead.stage]} to ${STAGE_LABEL[b.stage]}`);
   }
+  // An existing overdue date can be saved again unchanged (e.g. when only the next action is edited)
+  if (b.followUpOn && b.followUpOn !== ymd(lead.followUpOn)) checkFollowUp(b.followUpOn);
   if (b.followUpOn !== undefined) data.followUpOn = b.followUpOn ? dateOnly(b.followUpOn) : null;
   if (b.nextAction !== undefined) data.nextAction = b.nextAction || null;
   if (b.ownerId !== undefined && b.ownerId !== lead.ownerId) {
@@ -188,6 +213,7 @@ leads.patch('/:id', async (req, res) => {
     if (!owner || owner.role !== 'BDE' || !owner.active) throw new HttpError(400, 'Choose an active BDE');
     data.ownerId = owner.id;
     notes.push(`Moved from ${lead.owner.name} to ${owner.name}`);
+    logActivity(me(req).id, 'LEAD_MOVED', `${lead.name}: ${lead.owner.name} to ${owner.name}`);
   }
 
   const updated = await db.lead.update({

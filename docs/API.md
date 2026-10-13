@@ -12,12 +12,14 @@ Everything the web app can ask the server for. Any frontend design (Direction H 
 
 | Field | Values |
 |---|---|
-| Lead `stage` | `INTERESTED`, `FOLLOW_UP`, `INTERVIEW_SCHEDULED`, `SELECTED`, `PAYMENT_COMMITTED`, `PAID`, `NOT_INTERESTED` |
+| Lead `stage` | `NEW` (imported, not called yet), `INTERESTED`, `FOLLOW_UP`, `INTERVIEW_SCHEDULED`, `SELECTED`, `PAYMENT_COMMITTED`, `PAID`, `NOT_INTERESTED` |
 | Call `outcome` | `INTERESTED`, `CALL_BACK`, `NOT_INTERESTED`, `NO_ANSWER` |
 | Interview `status` / `result` | `SCHEDULED`, `ATTENDED`, `NO_SHOW` / `SELECTED`, `NOT_SELECTED` |
 | Payment `status` | `PROMISED`, `PARTIALLY_PAID`, `PAID` |
 | Receipt `check` | `TO_VERIFY`, `VERIFIED`, `REJECTED` (null for promises) |
-| Daily report `status` | `SENT`, `NOT_SENT`, `CALLING`, `NOT_STARTED` |
+| Daily report `status` | `SENT`, `NOT_SENT`, `CALLING`, `NOT_STARTED`, `ON_LEAVE` |
+| Attendance day `status` | `PRESENT`, `LATE`, `LEAVE`, `ABSENT`, `NOT_IN` (today, not started yet), `OFF` (Sunday), `UPCOMING` |
+| Leave `type` / `status` | `CASUAL`, `SICK`, `EMERGENCY`, `OTHER` / `PENDING`, `APPROVED`, `REJECTED`, `CANCELLED` |
 
 The frontend turns these into words on screen (e.g. `NO_SHOW` → "Missed").
 
@@ -38,7 +40,7 @@ The frontend turns these into words on screen (e.g. `NO_SHOW` → "Missed").
 |---|---|---|---|
 | `GET /users?status=active\|inactive\|all&q=` | Admin | | `{ users: user[] }` |
 | `GET /users/next-id` | Admin | | `{ employeeId: "BDE-031" }` |
-| `POST /users` | Admin | `{ name, phone, email?, joinedOn?, dailyTarget? }` | `{ user, temporaryPassword }`. Show the password once. |
+| `POST /users` | Admin | `{ name, phone, email?, joinedOn?, dailyTarget? }` | `{ user, temporaryPassword }`. Show the password once. **409** if another account already has this phone number (also on `PATCH`). |
 | `PATCH /users/:id` | Admin | any of the above, or `{ active: false }` to deactivate | `{ user }` |
 | `POST /users/:id/reset-password` | Admin | | `{ temporaryPassword }` |
 
@@ -52,31 +54,33 @@ The frontend turns these into words on screen (e.g. `NO_SHOW` → "Missed").
 ## Today (BDE's working day)
 
 All return the **today** object:
-`{ date, target, cutoff: "19:30", counts: { INTERESTED, CALL_BACK, NOT_INTERESTED, NO_ANSWER }, total, recent: [{ id, outcome, calledAt }], submittedAt, todo: { followUps, interviewsToMark, paymentsDue } }`
+`{ date, target, cutoff: "19:30", counts: { INTERESTED, CALL_BACK, NOT_INTERESTED, NO_ANSWER }, total, recent: [{ id, outcome, calledAt }], submittedAt, note, punchIn, punchOut, onLeave, todo: { followUps, interviewsToMark, paymentsDue } }`
 
 | Method and path | Who | Send |
 |---|---|---|
 | `GET /today` | BDE | |
-| `POST /today/calls` | BDE | `{ outcome }`. Logs one call. 409 if today's report is already sent. |
+| `POST /today/punch-in` | BDE | Start the working day (attendance). Doing it again keeps the first time. |
+| `POST /today/calls` | BDE | `{ outcome }`. Logs one call, and punches in if not done yet. 409 if today's report is already sent. |
 | `DELETE /today/calls/:id` | BDE | Undo a call from today |
-| `POST /today/submit` | BDE | Send today's report |
-| `POST /today/reopen` | BDE | Reopen today's report to fix it |
+| `POST /today/submit` | BDE | `{ note? }` (up to 500 characters, for the admin). Sends today's report and punches out. |
+| `POST /today/reopen` | BDE | Reopen today's report to fix it. Clears the punch out until it is sent again. |
 
 ## Daily reports
 
 | Method and path | Who | Get back |
 |---|---|---|
-| `GET /daily-reports?from=&to=` | Admin | `{ from, to, days, rows: [{ bde, counts, total, target, status, sentDays, dueDays, submittedAt }] }`. One day if `to` is left out. |
+| `GET /daily-reports?from=&to=` | Admin | `{ from, to, days, rows: [{ bde, counts, total, target, status, sentDays, dueDays, submittedAt, note }] }`. One day if `to` is left out. `note` is only filled for one day. Days on approved leave don't count as due. |
 
 ## Leads
 
 | Method and path | Who | Send | Get back |
 |---|---|---|---|
 | `GET /leads?view=all\|active\|due\|overdue&stage=&ownerId=&q=` | Any | | `{ leads: lead[], counts: { byStage, overdue, due, active } }` |
-| `POST /leads` | Any | `{ name, phone, courseId, stage?, followUpOn?, nextAction?, ownerId? (admin only, required) }` | `{ lead }`. **409** if the phone number is already a lead, with a message naming the BDE. |
+| `POST /leads` | Any | `{ name, phone, courseId, stage?, followUpOn?, nextAction?, ownerId? (admin only, required) }` | `{ lead }`. **409** if the phone number is already a lead, with a message naming the BDE. **400** if `stage` is `INTERVIEW_SCHEDULED` or `PAID`, or `followUpOn` is before today. |
 | `GET /leads/:id` | Any | | `{ lead, money: { fee, paid, balance }, notes, interviews, payments }` |
-| `PATCH /leads/:id` | Any | any of `{ name, courseId, stage, followUpOn, nextAction }`; admins can also send `ownerId` to move it | `{ lead }`. Changes are written to the lead's history. |
+| `PATCH /leads/:id` | Any | any of `{ name, courseId, stage, followUpOn, nextAction }`; admins can also send `ownerId` to move it | `{ lead }`. Changes are written to the lead's history. **400** if `stage` becomes `INTERVIEW_SCHEDULED` with no booked interview, or `PAID` before the full fee is verified, or `followUpOn` changes to a date before today. |
 | `POST /leads/:id/notes` | Any | `{ text }` | `{ note }` |
+| `POST /leads/import` | Admin | **multipart form**: file `file` (.xlsx or .csv, max 5 MB, up to 2000 rows), `ownerId`, `courseId` (used when a row names no course), `commit` (`false` = preview only) | `{ file, owner, columns, rows, ready, created, preview: [first 8], skipped: [{ row, name, phone, reason }], skippedCount }`. Each imported row becomes a `NEW` lead with a follow-up today. Bad numbers, numbers that are already leads and repeats in the file are skipped. |
 
 `lead` = `{ id, name, phone, course: { id, name, type, fee }, owner: { id, employeeId, name }, stage, followUpOn, nextAction, createdAt }`
 
@@ -106,13 +110,51 @@ All return the **today** object:
 
 | Method and path | Who | Get back |
 |---|---|---|
-| `GET /stats/dashboard` | Admin | `{ date, today: { calls, target, interested, interviews: { total, attended }, collected: { amount, count } }, todo: { receiptsToVerify, notStarted, overdueFollowUps, interviewsToMark }, month }` |
+| `GET /stats/dashboard` | Admin | `{ date, today: { bdes, calls, target, interested, interviews: { total, attended }, collected: { amount, count } }, todo: { receiptsToVerify, leavesToApprove, notStarted, overdueFollowUps, interviewsToMark }, month }`. `notStarted` leaves out BDEs on approved leave. |
 | `GET /stats/monthly?month=2026-10` | Any | Admin: `{ month, from, to, rows: [{ bde, stats, rank }], totals }`. BDE: `{ month, me: { stats, rank }, teamSize }` |
 | `GET /stats/bde/:id?month=` | Admin, or the BDE for themselves | `{ month, bde, rank, teamSize, stats, teamAverage, days: [{ date, calls }] }` |
 | `GET /stats/attendance?month=` | Admin | `{ month, totals, lowest: [{ bde, scheduled, attended, rate }] }` |
 
+## Attendance
+
+`cell` = `{ date, status, punchIn, punchOut, hours }`. Late means punching in after `LATE_AFTER` (`.env`, default 10:00). A day with calls but no punch-in counts as present.
+
+| Method and path | Who | Get back |
+|---|---|---|
+| `GET /attendance?month=2026-10` | Admin | `{ month, from, to, lateAfter, dates, rows: [{ bde, cells, totals: { present, late, leave, absent, hours } }], today: { present, late, onLeave, notIn } }` (every active BDE) |
+| `GET /attendance/me?month=` | Any | The logged-in user's own `{ month, lateAfter, bde, cells, totals }` |
+
+## Leave
+
+`leave` = `{ id, type, from, to, days, reason, status, decisionNote, decidedBy, decidedAt, createdAt, user }`. `days` doesn't count Sundays.
+
+| Method and path | Who | Send | Get back |
+|---|---|---|---|
+| `GET /leaves?status=pending|all` | Any | | `{ leaves, pending }`. BDEs get their own, newest request first. The admin gets everyone's, waiting ones first. |
+| `POST /leaves` | BDE | `{ type, from, to, reason }` | `{ leave }`. Dates up to 7 days back and 4 months ahead. **409** if it overlaps a waiting or approved request. |
+| `POST /leaves/:id/cancel` | BDE (own) | | `{ leave }`. Waiting, or approved but not started yet. |
+| `POST /leaves/:id/approve` | Admin | `{ note? }` | `{ leave }` |
+| `POST /leaves/:id/reject` | Admin | `{ note }` (required, the BDE sees it) | `{ leave }`. **409** if already answered. |
+
+## Chat
+
+One-to-one messages between any two active people (BDE to BDE, BDE to admin). The app asks for new messages every few seconds; no extra server is needed. Messages are private and never appear in the activity log.
+
+| Method and path | Who | Send | Get back |
+|---|---|---|---|
+| `GET /chat/unread` | Any | | `{ count }` |
+| `GET /chat/contacts` | Any | | `{ contacts: [{ user: { id, employeeId, name, role }, last: { text, at, mine } | null, unread }] }`, latest conversation first |
+| `GET /chat/:userId?after=<messageId>` | Any | | `{ with, messages: [{ id, from, text, at, readAt }], seenUpTo }`. Last 200, or only newer than `after`. Marks their messages to you as read. `seenUpTo` = your newest message they have read. |
+| `POST /chat/:userId` | Any | `{ text }` (1 to 1000 characters) | `{ message }`. **409** if their account is deactivated. |
+
+## Activity log
+
+| Method and path | Who | Get back |
+|---|---|---|
+| `GET /activity?userId=&action=&date=&before=` | Admin | `{ items: [{ id, at, action, detail, user }], nextBefore }`. Newest first, 100 at a time; pass `before=nextBefore` for older ones. Actions are listed in `server/src/lib/activity.ts`. |
+
 ## Excel downloads (Admin)
 
-`GET /exports/daily.xlsx?from=&to=`, `GET /exports/monthly.xlsx?month=`, `GET /exports/leads.xlsx`, `GET /exports/payments.xlsx`
+`GET /exports/attendance.xlsx?month=`, `GET /exports/daily.xlsx?from=&to=` (one day includes the BDEs' notes), `GET /exports/monthly.xlsx?month=`, `GET /exports/leads.xlsx`, `GET /exports/payments.xlsx`
 
 PDF: the web app opens a print-friendly page and uses the browser's "Save as PDF".

@@ -16,6 +16,11 @@ import { interviews } from './routes/interviews.js';
 import { payments } from './routes/payments.js';
 import { stats } from './routes/stats.js';
 import { exportsRouter } from './routes/exports.js';
+import { attendance } from './routes/attendance.js';
+import { leaves } from './routes/leaves.js';
+import { chat } from './routes/chat.js';
+import { activity } from './routes/activity.js';
+import { leadImport } from './routes/leadImport.js';
 
 export function createApp() {
   const app = express();
@@ -60,11 +65,16 @@ export function createApp() {
   app.use('/api/courses', courses);
   app.use('/api/today', today);
   app.use('/api/daily-reports', dailyReports);
+  app.use('/api/leads/import', leadImport);
   app.use('/api/leads', leads);
   app.use('/api/interviews', interviews);
   app.use('/api/payments', payments);
   app.use('/api/stats', stats);
   app.use('/api/exports', exportsRouter);
+  app.use('/api/attendance', attendance);
+  app.use('/api/leaves', leaves);
+  app.use('/api/chat', chat);
+  app.use('/api/activity', activity);
   app.use('/api', () => { throw new HttpError(404, 'No such API endpoint'); });
 
   // In production the built web app is served from here too: one server, one address

@@ -21,6 +21,8 @@ enum CourseType {
 }
 
 enum LeadStage {
+  /// Imported from a sheet and not called yet
+  NEW
   INTERESTED
   FOLLOW_UP
   INTERVIEW_SCHEDULED
@@ -79,13 +81,19 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  leads       Lead[]       @relation("LeadOwner")
-  notes       LeadNote[]
-  calls       CallLog[]
-  reports     DailyReport[]
-  interviews  Interview[]  @relation("InterviewCreator")
-  payments    Payment[]    @relation("PaymentRecorder")
-  verified    Payment[]    @relation("PaymentVerifier")
+  leads         Lead[]        @relation("LeadOwner")
+  notes         LeadNote[]
+  calls         CallLog[]
+  reports       DailyReport[]
+  interviews    Interview[]   @relation("InterviewCreator")
+  payments      Payment[]     @relation("PaymentRecorder")
+  verified      Payment[]     @relation("PaymentVerifier")
+  attendance    Attendance[]
+  leaves        Leave[]       @relation("LeaveOwner")
+  leavesDecided Leave[]       @relation("LeaveDecider")
+  activity      Activity[]
+  sent          Message[]     @relation("MessageSender")
+  received      Message[]     @relation("MessageRecipient")
 }
 
 model Course {
@@ -156,6 +164,8 @@ model DailyReport {
   bdeId       Int
   workDate    DateTime  @db.Date
   submittedAt DateTime?
+  /// Optional note for the admin: problems, anything to flag
+  note        String?   @db.VarChar(500)
 
   bde User @relation(fields: [bdeId], references: [id])
 
@@ -200,8 +210,8 @@ model Payment {
   verifiedAt   DateTime?
 
   /// For promises: set when money arrives, so it leaves the "promised" list
-  closedAt     DateTime?
-  createdAt    DateTime      @default(now())
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
 
   lead       Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
   recordedBy User  @relation("PaymentRecorder", fields: [recordedById], references: [id])
@@ -210,4 +220,86 @@ model Payment {
   @@index([leadId])
   @@index([date])
   @@index([check])
+}
+
+enum LeaveType {
+  CASUAL
+  SICK
+  EMERGENCY
+  OTHER
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+/// One row per BDE per working day: when they started and finished.
+model Attendance {
+  id       Int       @id @default(autoincrement())
+  userId   Int
+  /// India date
+  workDate DateTime  @db.Date
+  punchIn  DateTime
+  /// Set when the day's report is sent; cleared if the report is reopened
+  punchOut DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, workDate])
+  @@index([workDate])
+}
+
+/// A BDE's leave request. Approved leave days count as "Leave", not "Absent".
+model Leave {
+  id           Int         @id @default(autoincrement())
+  userId       Int
+  type         LeaveType
+  fromDate     DateTime    @db.Date
+  toDate       DateTime    @db.Date
+  reason       String      @db.VarChar(300)
+  status       LeaveStatus @default(PENDING)
+  decidedById  Int?
+  decidedAt    DateTime?
+  decisionNote String?     @db.VarChar(200)
+  createdAt    DateTime    @default(now())
+
+  user      User  @relation("LeaveOwner", fields: [userId], references: [id])
+  decidedBy User? @relation("LeaveDecider", fields: [decidedById], references: [id])
+
+  @@index([userId, fromDate])
+  @@index([status])
+}
+
+/// Who did what and when, for the admin's activity log.
+model Activity {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  /// Short code, e.g. LOGIN, PUNCH_IN, LEAD_ADDED (see lib/activity.ts)
+  action    String   @db.VarChar(30)
+  detail    String   @db.VarChar(300)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
+/// A direct chat message between two people.
+model Message {
+  id          Int       @id @default(autoincrement())
+  senderId    Int
+  recipientId Int
+  text        String    @db.VarChar(1000)
+  createdAt   DateTime  @default(now())
+  readAt      DateTime?
+
+  sender    User @relation("MessageSender", fields: [senderId], references: [id])
+  recipient User @relation("MessageRecipient", fields: [recipientId], references: [id])
+
+  @@index([senderId, recipientId, id])
+  @@index([recipientId, readAt])
 }

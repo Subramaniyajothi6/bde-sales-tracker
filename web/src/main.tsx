@@ -6,6 +6,10 @@ import { AuthProvider } from './lib/auth';
 import { ToastProvider } from './lib/hooks';
 import './styles/base.css';
 import './styles/pages.css';
+import './styles/features.css';
+import { registerPwa } from './lib/pwa';
+
+registerPwa();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

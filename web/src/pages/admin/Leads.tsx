@@ -5,6 +5,7 @@ import { download, errorText, useLoad, useToast } from '../../lib/hooks';
 import { STAGES, STAGE_LABEL, fmtDate, istDate, rupee } from '../../lib/format';
 import { Badge, Due, Empty, ErrorNote, Loading, Modal } from '../../components/ui';
 import { PageHead } from '../../components/PageHead';
+import { ImportLeads } from './ImportLeads';
 
 export default function Leads() {
   const [params] = useSearchParams();
@@ -13,6 +14,7 @@ export default function Leads() {
   const [q, setQ] = useState('');
   const [overdue, setOverdue] = useState(params.get('view') === 'overdue');
   const [openId, setOpenId] = useState<number | null>(null);
+  const [importing, setImporting] = useState(false);
   const bdes = useLoad(() => api.users.list({ status: 'active' }));
   const { data, error, reload } = useLoad(
     () => api.leads.list({ view: overdue ? 'overdue' : 'all', stage: stage || undefined, ownerId: owner ? Number(owner) : undefined, q: q.trim() || undefined }),
@@ -28,7 +30,10 @@ export default function Leads() {
         <section className="panel">
           <div className="panel-head">
             <h2>{data ? `${data.leads.length} lead${data.leads.length === 1 ? '' : 's'}` : 'Leads'}</h2>
-            <button type="button" className="btn ghost" onClick={() => download(api.exports.leads())}>Download Excel</button>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" className="btn ghost" onClick={() => setImporting(true)}>Import from Excel</button>
+              <button type="button" className="btn ghost" onClick={() => download(api.exports.leads())}>Download Excel</button>
+            </div>
           </div>
           <div className="toolbar">
             <div className="chips" role="group" aria-label="Status">
@@ -70,6 +75,7 @@ export default function Leads() {
           )}
         </section>
       </main>
+      <ImportLeads open={importing} onClose={() => setImporting(false)} onDone={() => { setImporting(false); void reload(); }} />
       <LeadDrawer id={openId} bdes={bdes.data?.users ?? []} onClose={() => setOpenId(null)} onSaved={reload} />
     </>
   );
@@ -110,7 +116,10 @@ function LeadDrawer({ id, bdes, onClose, onSaved }: { id: number | null; bdes: {
               .map(([k, v]) => <div key={k}><div className="muted">{k}</div><div>{v}</div></div>)}
           </div>
           <label className="field">Status
-            <select className="select" value={stage} onChange={e => setStage(e.target.value as Stage)}>{STAGES.map(s => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}</select>
+            <select className="select" value={stage} onChange={e => setStage(e.target.value as Stage)}>
+              {/* These two follow a booked interview and a verified fee, so they can't be picked by hand */}
+              {STAGES.map(s => <option key={s} value={s} disabled={(s === 'PAID' || s === 'INTERVIEW_SCHEDULED' || s === 'NEW') && s !== l.stage}>{STAGE_LABEL[s]}</option>)}
+            </select>
           </label>
           <label className="field">Assigned BDE
             <select className="select" value={owner} onChange={e => setOwner(Number(e.target.value))}>

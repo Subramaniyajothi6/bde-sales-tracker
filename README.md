@@ -1,6 +1,6 @@
 # ADZ4NEEDZ BDE Team Management & Sales Tracking
 
-Web app for 30 BDEs and their admin. BDEs log calls, manage leads, book interviews and record payments from their phone. The admin sees every BDE's reports, verifies payment receipts and downloads Excel/PDF reports.
+Web app for 30 BDEs and their admin. BDEs start their day (attendance), log calls, manage leads, book interviews, record payments, ask for leave and chat with each other and the admin. It is a web app made for laptops, and it also works on tablets and phones (it can even be installed on a phone like an app). The admin sees every BDE's reports and attendance, answers leave requests, verifies payment receipts, imports leads from Excel, sees an activity log and downloads Excel/PDF reports.
 
 Everything here is free and open source. Moving to a paid server and domain later only means changing settings (see [docs/DEPLOY.md](docs/DEPLOY.md)).
 
@@ -140,9 +140,9 @@ Open **http://localhost:5173**.
 | Admin | `ADMIN-01` | your `SEED_ADMIN_PASSWORD` from `.env` |
 | BDE (sample data) | `BDE-001` to `BDE-030` | `Bde@12345` |
 
-`BDE-014` (Karthik R.) has the most sample leads, interviews and payments. To see BDE screens at phone size, press `F12` then `Ctrl + Shift + M`. To use admin and BDE at the same time, sign in to one of them in a private/incognito window.
+`BDE-014` (Karthik R.) has the most sample leads, interviews and payments. BDE and admin screens are made for laptops. To check how they look on a phone, press `F12` then `Ctrl + Shift + M`. To use admin and BDE at the same time, sign in to one of them in a private/incognito window.
 
-**Check everything works (optional):** with the API running, in `server/` run `npm run check:api`. It should end with `68 passed, 0 failed`. It adds test records, so only use it on your own development database.
+**Check everything works (optional):** with the API running, in `server/` run `npm run check:api`. It should end with `107 passed, 0 failed`. It adds test records, so only use it on your own development database.
 
 ### On a phone
 
@@ -175,7 +175,7 @@ Run the web app with `npm run dev -- --host` in `web/`, then open the "Network" 
 | Where | Command | What it does |
 |---|---|---|
 | server | `npm run dev` | API with auto-restart on code changes |
-| server | `npm run check:api` | Tests every API flow (68 checks). **Development database only**: it adds test records. |
+| server | `npm run check:api` | Tests every API flow (107 checks). **Development database only**: it adds test records. |
 | server | `npm run typecheck` | Checks the TypeScript |
 | server | `npm run db:migrate` | After changing `prisma/schema.prisma`: creates a migration and applies it |
 | server | `npx prisma studio` | Browse and edit the database in the browser |

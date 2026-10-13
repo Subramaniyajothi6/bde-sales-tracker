@@ -58,7 +58,8 @@ console.log('Daily reports');
 r = await admin('GET', '/daily-reports');
 ok(r.status === 200 && r.data.rows.length >= 30, 'a row per active BDE today', r.data.rows?.length);
 const karthik = r.data.rows.find(x => x.bde.employeeId === 'BDE-014');
-ok(karthik && karthik.total === before && karthik.status === 'CALLING', 'Karthik row matches his today total', karthik);
+// Sample data may have no calls today (it is dated when seeded), so both states are right
+ok(karthik && karthik.total === before && karthik.status === (before ? 'CALLING' : 'NOT_STARTED'), 'Karthik row matches his today total', karthik);
 r = await admin('GET', `/daily-reports?from=${today.slice(0, 8)}01&to=${today}`);
 ok(r.status === 200 && r.data.rows[0].dueDays >= 1, 'month range');
 
@@ -147,7 +148,7 @@ ok(!r.data.payments.some(p => p.lead.id === leadId), 'promise closed after payme
 
 console.log('Stats');
 r = await admin('GET', '/stats/dashboard');
-ok(r.status === 200 && r.data.today.calls > 0 && r.data.month.rows.length >= 30, 'dashboard', r.data.today);
+ok(r.status === 200 && r.data.today.calls >= 0 && r.data.today.target > 0 && r.data.month.rows.length >= 30, 'dashboard', r.data.today);
 r = await admin('GET', '/stats/monthly');
 ok(r.data.rows[0].rank === 1 && r.data.totals.revenue > 0, 'monthly ranked', r.data.totals);
 r = await bde('GET', '/stats/monthly');
@@ -169,8 +170,10 @@ ok((await bde('GET', '/exports/leads.xlsx')).status === 403, 'BDE cannot export'
 
 console.log('Team');
 const nextId = (await admin('GET', '/users/next-id')).data.employeeId;
-r = await admin('POST', '/users', { name: 'New Person', phone: '9876501234' });
+const bdePhone = '8' + String(Math.floor(Math.random() * 1e9)).padStart(9, '0');
+r = await admin('POST', '/users', { name: 'New Person', phone: bdePhone });
 ok(r.status === 201 && r.data.user.employeeId === nextId && r.data.temporaryPassword, 'add BDE gets next ID ' + nextId, r.data);
+ok((await admin('POST', '/users', { name: 'Same Phone', phone: bdePhone })).status === 409, 'second BDE with the same phone refused');
 const newId = r.data.user.id, tmp = r.data.temporaryPassword;
 const fresh = client();
 r = await fresh('POST', '/auth/login', { employeeId: nextId, password: tmp });
@@ -183,6 +186,102 @@ await admin('PATCH', `/users/${newId}`, { active: false });
 ok((await fresh('GET', '/today')).status === 401, 'deactivated BDE is logged out immediately');
 r = await admin('POST', `/users/${newId}/reset-password`);
 ok(r.data.temporaryPassword, 'reset password');
+
+console.log('Attendance and report note');
+r = await bde('POST', '/today/punch-in');
+ok(r.status === 200 && r.data.punchIn, 'punch in', r.data);
+const firstIn = r.data.punchIn;
+r = await bde('POST', '/today/punch-in');
+ok(r.data.punchIn === firstIn, 'second punch in keeps the first time');
+r = await bde('POST', '/today/submit', { note: 'Need more numbers' });
+ok(r.data.submittedAt && r.data.punchOut && r.data.note === 'Need more numbers', 'sending the report saves the note and punches out', r.data);
+r = await admin('GET', `/daily-reports?from=${today}`);
+ok(r.data.rows.find(x => x.bde.employeeId === 'BDE-014')?.note === 'Need more numbers', 'admin sees the note in daily reports');
+r = await bde('POST', '/today/reopen');
+ok(r.data.submittedAt === null && r.data.punchOut === null, 'reopening clears punch out', r.data);
+r = await admin('GET', '/attendance');
+const karthikRow = r.data.rows?.find(x => x.bde.employeeId === 'BDE-014');
+ok(r.status === 200 && ['PRESENT', 'LATE'].includes(karthikRow?.cells[r.data.dates.indexOf(today)]?.status), 'admin month grid shows BDE present today', r.data.today);
+ok((await bde('GET', '/attendance')).status === 403, 'BDE cannot read everyone\'s attendance');
+r = await bde('GET', '/attendance/me');
+ok(r.status === 200 && r.data.totals.present >= 1, 'BDE reads own attendance', r.data.totals);
+r = await admin('GET', '/exports/attendance.xlsx');
+ok(r.status === 200 && r.type.includes('spreadsheet'), 'attendance Excel', r.status);
+
+console.log('Leave');
+// A free weekday 30 to 89 days ahead, so reruns don't clash with earlier requests
+const leaveDay = (offset) => { const d = new Date(Date.now() + (offset + Math.floor(Math.random() * 60)) * 864e5); if (d.getUTCDay() === 0) d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
+const l1 = leaveDay(30);
+r = await bde('POST', '/leaves', { type: 'SICK', from: l1, to: l1, reason: 'x' });
+ok(r.status === 400, 'leave without a proper reason -> 400');
+r = await bde('POST', '/leaves', { type: 'CASUAL', from: l1, to: '2020-01-01', reason: 'Backwards dates' });
+ok(r.status === 400, 'last day before first day -> 400');
+r = await bde('POST', '/leaves', { type: 'SICK', from: l1, to: l1, reason: 'API check leave' });
+ok(r.status === 201 && r.data.leave.status === 'PENDING', 'BDE asks for leave', r.data);
+const leaveId = r.data.leave?.id;
+ok((await bde('POST', '/leaves', { type: 'SICK', from: l1, to: l1, reason: 'Same day again' })).status === 409, 'overlapping request -> 409');
+ok((await bde('POST', `/leaves/${leaveId}/approve`)).status === 403, 'BDE cannot approve leave');
+r = await admin('GET', '/stats/dashboard');
+ok(r.data.todo.leavesToApprove >= 1, 'dashboard counts leave to answer');
+ok((await admin('POST', `/leaves/${leaveId}/reject`, {})).status === 400, 'reject needs a reason');
+r = await admin('POST', `/leaves/${leaveId}/approve`);
+ok(r.data.leave?.status === 'APPROVED', 'admin approves leave', r.data);
+ok((await admin('POST', `/leaves/${leaveId}/reject`, { note: 'Too late' })).status === 409, 'answered leave cannot be answered again');
+r = await bde('POST', `/leaves/${leaveId}/cancel`);
+ok(r.data.leave?.status === 'CANCELLED', 'BDE cancels approved leave that has not started', r.data);
+
+console.log('Lead import');
+const imp = (csv, commit) => {
+  const f = new FormData();
+  f.append('ownerId', String(karthikRow.bde.id)); f.append('courseId', String(courses[0].id)); f.append('commit', String(commit));
+  f.append('file', new Blob([csv], { type: 'text/csv' }), 'check.csv');
+  return admin('POST', '/leads/import', f, true);
+};
+const n1 = '6' + String(Math.floor(Math.random() * 1e9)).padStart(9, '0'), n2 = '6' + String(Math.floor(Math.random() * 1e9)).padStart(9, '0');
+const csv = `Name,Mobile\nImport One,${n1}\nImport Two,+91 ${n2}\nBroken,123\nAgain,${n1}\n`;
+r = await imp(csv, false);
+ok(r.status === 200 && r.data.ready === 2 && r.data.skippedCount === 2 && r.data.created === 0, 'import preview: 2 ready, 2 skipped, nothing saved', r.data);
+r = await imp(csv, true);
+ok(r.data.created === 2, 'import saves 2 leads', r.data);
+r = await imp(csv, false);
+ok(r.data.ready === 0 && r.data.skipped.every(s => /Already a lead|valid|earlier/.test(s.reason)), 'importing again skips them', r.data);
+r = await bde('GET', `/leads?q=${n1}&view=all`);
+ok(r.data.leads[0]?.stage === 'NEW', 'imported lead is New for the BDE', r.data.leads[0]);
+const xls = new FormData(); xls.append('ownerId', '1'); xls.append('courseId', '1'); xls.append('file', new Blob(['x']), 'old.xls');
+ok((await admin('POST', '/leads/import', xls, true)).status === 400, 'old .xls refused with a message');
+ok((await bde('POST', '/leads/import', xls, true)).status === 403, 'BDE cannot import');
+
+console.log('Chat');
+const bala = client();
+await bala('POST', '/auth/login', { employeeId: 'BDE-002', password: 'Bde@12345' });
+const balaId = (await admin('GET', '/users?q=BDE-002')).data.users[0].id;
+const word = 'check-' + Date.now();
+r = await bde('POST', `/chat/${balaId}`, { text: `Hi Bala ${word}` });
+ok(r.status === 201, 'BDE messages another BDE', r.data);
+ok((await bde('POST', `/chat/${balaId}`, { text: '   ' })).status === 400, 'empty message -> 400');
+r = await bala('GET', '/chat/unread');
+ok(r.data.count >= 1, 'other BDE has unread', r.data);
+r = await bala('GET', '/chat/contacts');
+ok(r.data.contacts.find(c => c.user.employeeId === 'BDE-014')?.unread >= 1, 'contact list shows unread from sender');
+const karthikId = karthikRow.bde.id;
+r = await bala('GET', `/chat/${karthikId}`);
+ok(r.data.messages.some(m => m.text.includes(word)), 'other BDE reads the message');
+r = await bala('GET', '/chat/contacts');
+ok(r.data.contacts.find(c => c.user.employeeId === 'BDE-014')?.unread === 0, 'reading marks the messages as read');
+r = await bde('GET', `/chat/${balaId}`);
+ok(r.data.seenUpTo >= r.data.messages.at(-1).id, 'sender sees "seen"', r.data.seenUpTo);
+r = await bde('POST', '/chat/1', { text: `To admin ${word}` });
+ok(r.status === 201, 'BDE messages admin');
+r = await admin('GET', `/chat/${karthikId}?after=${r.data.message.id - 1}`);
+ok(r.data.messages.length === 1 && r.data.messages[0].text.includes(word), 'admin gets only newer messages with ?after');
+ok((await bde('GET', '/chat/999999')).status === 404, 'chat with unknown person -> 404');
+
+console.log('Activity log');
+ok((await bde('GET', '/activity')).status === 403, 'BDE cannot read the activity log');
+r = await admin('GET', `/activity?userId=${karthikId}`);
+const acts = r.data.items?.map(i => i.action) ?? [];
+ok(['PUNCH_IN', 'REPORT_SENT', 'LEAVE_REQUESTED'].every(a => acts.includes(a)), 'log has punch in, report and leave', acts.slice(0, 10));
+ok(!r.data.items.some(i => i.detail.includes(word)), 'chat text is not in the log');
 
 console.log('Logout');
 await bde('POST', '/auth/logout');

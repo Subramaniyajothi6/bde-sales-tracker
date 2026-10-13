@@ -5,6 +5,7 @@ import { db } from '../lib/db.js';
 import { HttpError, forbidden, notFound } from '../lib/http.js';
 import { isAdmin, me } from '../lib/auth.js';
 import { addDays, dateOnly, humanDate, humanTime, istInstant, istInstantRange, todayIST } from '../lib/time.js';
+import { logActivity } from '../lib/activity.js';
 import { formatPhone } from '../lib/phone.js';
 import { userRef } from '../lib/present.js';
 import { leadFor } from './leads.js';
@@ -68,6 +69,7 @@ interviews.post('/', async (req, res) => {
     }),
     db.interview.create({ data: { leadId: lead.id, createdById: me(req).id, scheduledAt: at }, include: withLead })
   ]);
+  logActivity(me(req).id, 'INTERVIEW_BOOKED', `${lead.name}, ${humanDate(b.date)} ${humanTime(b.time)}`);
   res.status(201).json({ interview: out(iv) });
 });
 
@@ -108,6 +110,7 @@ interviews.patch('/:id', async (req, res) => {
     db.lead.update({ where: { id: iv.leadId }, data: { ...leadData, notes: { create: notes.map(text => ({ authorId: actor, text })) } } }),
     db.interview.update({ where: { id: iv.id }, data: ivData, include: withLead })
   ]);
+  logActivity(actor, 'INTERVIEW_MARKED', `${iv.lead.name}: ${notes.join(', ').toLowerCase()}`);
   res.json({ interview: out(updated) });
 });
 

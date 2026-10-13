@@ -14,7 +14,8 @@ export default function Dashboard() {
   const t = data.today;
   const todo = ([
     [data.todo.receiptsToVerify, 'receipts to verify', '/admin/payments'],
-    [data.todo.notStarted, "BDEs haven't started calling", '/admin/daily-reports?show=missing'],
+    [data.todo.leavesToApprove, 'leave requests to answer', '/admin/attendance'],
+    [data.todo.notStarted, "BDEs haven't started calling", '/admin/daily-reports?show=not-started'],
     [data.todo.overdueFollowUps, 'follow-ups overdue', '/admin/leads?view=overdue'],
     [data.todo.interviewsToMark, 'interviews not marked', '/admin/interviews']
   ] as const).filter(([n]) => n > 0);
@@ -23,16 +24,16 @@ export default function Dashboard() {
     <>
       <PageHead title="Dashboard" sub={fmtDate(data.date, true)}>
         <StatStrip items={[
-          { name: 'Calls', value: int(t.calls), sub: `of ${int(t.target)} target` },
-          { name: 'Interested', value: int(t.interested) },
-          { name: 'Interviews attended', value: `${t.interviews.attended} of ${t.interviews.total}` },
-          { name: 'Collected', value: rupee(t.collected.amount), sub: `${t.collected.count} payment${t.collected.count === 1 ? '' : 's'}` }
+          { name: 'Calls today', value: int(t.calls), sub: `of ${int(t.target)} team target` },
+          { name: 'Interested today', value: int(t.interested), sub: `from ${int(t.calls)} calls` },
+          { name: 'Interviews today', value: `${t.interviews.attended} of ${t.interviews.total}`, sub: 'attended so far' },
+          { name: 'Collected today', value: rupee(t.collected.amount), sub: `${t.collected.count} payment${t.collected.count === 1 ? '' : 's'}, incl. unverified` }
         ]} />
       </PageHead>
       <main className="wrap">
         <div className="row">
           <section className="panel grow">
-            <div className="panel-head"><h2>BDEs this month</h2><Link className="btn ghost sm" to="/admin/reports">Full report</Link></div>
+            <div className="panel-head"><h2>Each BDE, this month</h2><Link className="btn ghost sm" to="/admin/reports">Full report</Link></div>
             <SortTable
               rows={data.month.rows}
               rowKey={r => r.bde.id}

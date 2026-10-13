@@ -6,6 +6,7 @@ import { isAdmin, me, requireAdmin } from '../lib/auth.js';
 import { dateOnly, istInstantRange, monthRange, todayIST, workDays } from '../lib/time.js';
 import { dailyTotals, statsByBde, sumStats, type BdeStats } from '../lib/stats.js';
 import { userRef } from '../lib/present.js';
+import { leaveDays } from '../lib/attendance.js';
 
 export const stats = Router();
 
@@ -70,7 +71,7 @@ stats.get('/dashboard', requireAdmin, async (_req, res) => {
   const today = todayIST();
   const workDate = dateOnly(today);
   const t = istInstantRange(today, today);
-  const [bdes, calls, interviewsToday, paidToday, toVerify, overdue, callersToday, month] = await Promise.all([
+  const [bdes, calls, interviewsToday, paidToday, toVerify, overdue, callersToday, month, leavesToApprove, onLeave] = await Promise.all([
     db.user.findMany({ where: { role: 'BDE', active: true }, select: { id: true, dailyTarget: true } }),
     db.callLog.groupBy({ by: ['outcome'], where: { workDate }, _count: { _all: true } }),
     db.interview.groupBy({ by: ['status'], where: { scheduledAt: t }, _count: { _all: true } }),
@@ -78,13 +79,17 @@ stats.get('/dashboard', requireAdmin, async (_req, res) => {
     db.payment.count({ where: { check: 'TO_VERIFY' } }),
     db.lead.count({ where: { followUpOn: { lt: workDate }, stage: { notIn: ['PAID', 'NOT_INTERESTED'] } } }),
     db.callLog.groupBy({ by: ['bdeId'], where: { workDate } }),
-    monthlyRows()
+    monthlyRows(),
+    db.leave.count({ where: { status: 'PENDING' } }),
+    leaveDays(today, today)
   ]);
   const count = (arr: { _count: { _all: number } }[]) => arr.reduce((s, x) => s + x._count._all, 0);
   const ivCount = (s: string) => interviewsToday.find(i => i.status === s)?._count._all ?? 0;
   res.json({
     date: today,
     today: {
+      /** Active BDEs these numbers cover (the whole team) */
+      bdes: bdes.length,
       calls: count(calls),
       target: bdes.reduce((s, b) => s + b.dailyTarget, 0),
       interested: calls.find(c => c.outcome === 'INTERESTED')?._count._all ?? 0,
@@ -93,7 +98,9 @@ stats.get('/dashboard', requireAdmin, async (_req, res) => {
     },
     todo: {
       receiptsToVerify: toVerify,
-      notStarted: bdes.length - callersToday.filter(c => bdes.some(b => b.id === c.bdeId)).length,
+      // BDEs with no calls today, not counting anyone on approved leave
+      notStarted: bdes.filter(b => !callersToday.some(c => c.bdeId === b.id) && !onLeave.has(`${b.id}|${today}`)).length,
+      leavesToApprove,
       overdueFollowUps: overdue,
       interviewsToMark: ivCount('SCHEDULED')
     },

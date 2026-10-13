@@ -3,8 +3,9 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { db } from '../lib/db.js';
 import { HttpError, notFound } from '../lib/http.js';
-import { requireAdmin, tempPassword } from '../lib/auth.js';
+import { me, requireAdmin, tempPassword } from '../lib/auth.js';
 import { publicUser } from '../lib/present.js';
+import { logActivity } from '../lib/activity.js';
 import { normalizePhone, formatPhone } from '../lib/phone.js';
 import { dateOnly, todayIST } from '../lib/time.js';
 
@@ -48,10 +49,14 @@ const userFields = z.object({
   dailyTarget: z.coerce.number().int().min(1).max(500).optional()
 });
 
-function phoneOrThrow(input: string) {
+/** Valid, formatted phone that no other account uses. `selfId` is the account being edited. */
+async function phoneOrThrow(input: string, selfId?: number) {
   const p = normalizePhone(input);
   if (!p) throw new HttpError(400, 'Enter a valid 10-digit mobile number');
-  return formatPhone(p);
+  const phone = formatPhone(p);
+  const other = await db.user.findFirst({ where: { phone, ...(selfId ? { NOT: { id: selfId } } : {}) } });
+  if (other) throw new HttpError(409, `This number already belongs to ${other.name} (${other.employeeId})`);
+  return phone;
 }
 
 users.post('/', async (req, res) => {
@@ -61,7 +66,7 @@ users.post('/', async (req, res) => {
     data: {
       employeeId: await nextEmployeeId(),
       name: body.name,
-      phone: phoneOrThrow(body.phone),
+      phone: await phoneOrThrow(body.phone),
       email: body.email || null,
       joinedOn: dateOnly(body.joinedOn ?? todayIST()),
       dailyTarget: body.dailyTarget ?? 80,
@@ -71,6 +76,7 @@ users.post('/', async (req, res) => {
     }
   });
   // The temporary password is shown once, to the admin. Only its hash is stored.
+  logActivity(me(req).id, 'BDE_ADDED', `${user.name} (${user.employeeId})`);
   res.status(201).json({ user: publicUser(user), temporaryPassword: password });
 });
 
@@ -83,7 +89,7 @@ users.patch('/:id', async (req, res) => {
     where: { id },
     data: {
       name: body.name,
-      phone: body.phone !== undefined ? phoneOrThrow(body.phone) : undefined,
+      phone: body.phone !== undefined ? await phoneOrThrow(body.phone, id) : undefined,
       email: body.email === '' ? null : body.email,
       joinedOn: body.joinedOn ? dateOnly(body.joinedOn) : undefined,
       dailyTarget: body.dailyTarget,
@@ -92,6 +98,10 @@ users.patch('/:id', async (req, res) => {
       ...(body.active === false ? { tokenVersion: { increment: 1 } } : {})
     }
   });
+  const changed = Object.entries(body).filter(([k, v]) => k !== 'active' && v !== undefined).map(([k]) => k);
+  if (body.active === false && user.active) logActivity(me(req).id, 'BDE_DEACTIVATED', `${user.name} (${user.employeeId})`);
+  if (body.active === true && !user.active) logActivity(me(req).id, 'BDE_REACTIVATED', `${user.name} (${user.employeeId})`);
+  if (changed.length) logActivity(me(req).id, 'BDE_UPDATED', `${user.name}: changed ${changed.join(', ')}`);
   res.json({ user: publicUser(updated) });
 });
 
@@ -104,5 +114,6 @@ users.post('/:id/reset-password', async (req, res) => {
     where: { id },
     data: { passwordHash: await bcrypt.hash(password, 10), mustChangePassword: true, tokenVersion: { increment: 1 } }
   });
+  logActivity(me(req).id, 'PASSWORD_RESET', `${user.name} (${user.employeeId})`);
   res.json({ temporaryPassword: password });
 });

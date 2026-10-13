@@ -6,6 +6,7 @@ import { db } from '../lib/db.js';
 import { HttpError } from '../lib/http.js';
 import { endSession, me, requireAuth, sessionUser, startSession, strongEnough } from '../lib/auth.js';
 import { publicUser } from '../lib/present.js';
+import { logActivity } from '../lib/activity.js';
 
 export const auth = Router();
 
@@ -33,10 +34,13 @@ auth.post('/login', loginLimit, async (req, res) => {
 
   const updated = await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   startSession(res, updated);
+  logActivity(user.id, 'LOGIN', /Mobi|Android|iPhone|iPad/i.test(req.get('user-agent') ?? '') ? 'On a phone' : 'On a computer');
   res.json({ user: publicUser(updated) });
 });
 
-auth.post('/logout', (_req, res) => {
+auth.post('/logout', async (req, res) => {
+  const user = await sessionUser(req);
+  if (user) logActivity(user.id, 'LOGOUT', '');
   endSession(res);
   res.json({ ok: true });
 });
@@ -62,5 +66,6 @@ auth.post('/change-password', requireAuth, async (req, res) => {
     data: { passwordHash: await bcrypt.hash(newPassword, 10), mustChangePassword: false, tokenVersion: { increment: 1 } }
   });
   startSession(res, updated); // other devices are logged out, this one stays in
+  logActivity(user.id, 'PASSWORD_CHANGED', user.mustChangePassword ? 'Set their own password' : 'Changed password');
   res.json({ user: publicUser(updated) });
 });

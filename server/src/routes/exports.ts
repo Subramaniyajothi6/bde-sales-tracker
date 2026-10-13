@@ -3,88 +3,332 @@ import ExcelJS from 'exceljs';
 import { z } from 'zod';
 import { db } from '../lib/db.js';
 import { requireAdmin } from '../lib/auth.js';
-import { monthRange, todayIST, ymd } from '../lib/time.js';
+import { dateOnly, humanDate, monthRange, todayIST, ymd } from '../lib/time.js';
 import { formatPhone } from '../lib/phone.js';
 import { statsByBde } from '../lib/stats.js';
 import { dailyReportRows } from './dailyReports.js';
 import { STAGE_LABEL } from './leads.js';
+import { attendanceMonth } from './attendance.js';
+import type { DayStatus } from '../lib/attendance.js';
 
 /** Excel downloads (.xlsx). Admin only. */
 export const exportsRouter = Router();
 exportsRouter.use(requireAdmin);
 
-type Col = { header: string; key: string; width?: number; money?: boolean };
+// ---------- Shared sheet layout ----------
 
-async function sendSheet(res: Response, filename: string, title: string, cols: Col[], rows: Record<string, unknown>[]) {
+/** Colours match the web app (Direction H). ARGB hex. */
+const C = {
+  primary: 'FF1D4ED8', ink: 'FF1C2533', soft: 'FF5D6878', line: 'FFE1E5EB', zebra: 'FFF7F9FC', totalFill: 'FFEAF0FD',
+  green: 'FF15803D', greenTint: 'FFE8F5EC', amber: 'FFB45309', amberTint: 'FFFDF3E4',
+  red: 'FFB42318', redTint: 'FFFDECEA', violet: 'FF5B3CC4', violetTint: 'FFF0ECFB', blueTint: 'FFEAF0FD', grey: 'FFF0F2F5'
+};
+type Tone = 'green' | 'amber' | 'red' | 'violet' | 'blue' | 'grey';
+const TONE: Record<Tone, [string, string]> = {
+  green: [C.green, C.greenTint], amber: [C.amber, C.amberTint], red: [C.red, C.redTint],
+  violet: [C.violet, C.violetTint], blue: [C.primary, C.blueTint], grey: [C.soft, C.grey]
+};
+
+interface Col<R> {
+  header: string;
+  value: (r: R) => string | number | Date | null;
+  width?: number;
+  /** text = left, int / money = right with separators, date = "13 Oct 2026", center = centred text */
+  type?: 'text' | 'int' | 'money' | 'date' | 'center' | 'percent';
+  /** Add this column up in the Total row */
+  total?: boolean;
+  /** Colour a cell, e.g. a status, by returning a tone */
+  tone?: (r: R) => Tone | null;
+}
+
+interface Sheet<R> {
+  filename: string;
+  title: string;
+  subtitle: string;
+  rows: R[];
+  cols: Col<R>[];
+  /** Columns kept visible when scrolling sideways (e.g. ID and name) */
+  freezeCols?: number;
+  totalLabel?: string;
+}
+
+const HEADER_ROW = 5;
+/** Rupees with Indian grouping: ₹52,250 / ₹1,52,250 / ₹1,52,25,000 */
+const INR = String.raw`[>=10000000]"₹"##\,##\,##\,##0;[>=100000]"₹"##\,##\,##0;"₹"##,##0`;
+const thin = (argb: string) => ({ style: 'thin' as const, color: { argb } });
+const fill = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } });
+
+function downloadedAt() {
+  const now = new Date();
+  const time = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
+  return `${humanDate(todayIST())} ${todayIST().slice(0, 4)}, ${time}`;
+}
+
+async function sendSheet<R>(res: Response, s: Sheet<R>) {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'ADZ4NEEDZ BDE Tracker';
-  const ws = wb.addWorksheet(title.slice(0, 31));
-  ws.columns = cols.map(c => ({ header: c.header, key: c.key, width: c.width ?? Math.max(12, c.header.length + 2) }));
-  ws.getRow(1).font = { bold: true };
-  ws.views = [{ state: 'frozen', ySplit: 1 }];
-  rows.forEach(r => ws.addRow(r));
-  cols.forEach((c, i) => { if (c.money) ws.getColumn(i + 1).numFmt = '₹#,##0'; });
+  wb.creator = 'ADZ4NEEDZ BDE Sales Tracker';
+  wb.created = new Date();
+  const ws = wb.addWorksheet(s.title.slice(0, 31), {
+    properties: { defaultRowHeight: 20 },
+    pageSetup: {
+      paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+      printTitlesRow: `${HEADER_ROW}:${HEADER_ROW}`,
+      margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 }
+    },
+    headerFooter: { oddFooter: `&L${s.title}&RPage &P of &N` }
+  });
+  const n = s.cols.length;
+
+  ws.columns = s.cols.map(c => ({
+    width: c.width ?? Math.max(c.type === 'money' ? 14 : c.type === 'date' ? 14 : 11, c.header.length + 3)
+  }));
+
+  // Title block
+  ws.mergeCells(1, 1, 1, n);
+  ws.mergeCells(2, 1, 2, n);
+  ws.mergeCells(3, 1, 3, n);
+  Object.assign(ws.getCell(1, 1), { value: s.title, font: { name: 'Calibri', size: 16, bold: true, color: { argb: C.ink } } });
+  Object.assign(ws.getCell(2, 1), { value: s.subtitle, font: { name: 'Calibri', size: 11, color: { argb: C.ink } } });
+  Object.assign(ws.getCell(3, 1), { value: `ADZ4NEEDZ Pvt Ltd, BDE Sales Tracker. Downloaded ${downloadedAt()}.`, font: { name: 'Calibri', size: 9, italic: true, color: { argb: C.soft } } });
+  ws.getRow(1).height = 26;
+
+  // Header
+  const head = ws.getRow(HEADER_ROW);
+  head.values = s.cols.map(c => c.header);
+  head.height = 32;
+  head.eachCell(cell => {
+    cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = fill(C.primary);
+    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    cell.border = { left: thin(C.primary), right: thin('FF3B66E0'), top: thin(C.primary), bottom: thin(C.primary) };
+  });
+
+  // Data
+  s.rows.forEach((r, i) => {
+    const row = ws.getRow(HEADER_ROW + 1 + i);
+    row.height = 20;
+    s.cols.forEach((c, j) => {
+      const cell = row.getCell(j + 1);
+      const v = c.value(r);
+      cell.value = v === '' ? null : v;
+      cell.font = { name: 'Calibri', size: 11, color: { argb: C.ink } };
+      cell.border = { bottom: thin(C.line), left: thin(C.line), right: thin(C.line) };
+      if (i % 2 === 1) cell.fill = fill(C.zebra);
+      const t = c.type ?? 'text';
+      cell.alignment = { vertical: 'middle', horizontal: t === 'int' || t === 'money' ? 'right' : t === 'date' || t === 'center' || t === 'percent' ? 'center' : 'left', indent: t === 'text' ? 1 : 0 };
+      if (t === 'int') cell.numFmt = '#,##0';
+      if (t === 'money') cell.numFmt = INR;
+      if (t === 'date') cell.numFmt = 'dd mmm yyyy';
+      if (t === 'percent') cell.numFmt = '0%';
+      const tone = c.tone?.(r);
+      if (tone) {
+        cell.font = { ...cell.font, bold: true, color: { argb: TONE[tone][0] } };
+        cell.fill = fill(TONE[tone][1]);
+      }
+    });
+  });
+
+  const first = HEADER_ROW + 1, last = HEADER_ROW + s.rows.length;
+
+  // Total row (real formulas, so it stays right if someone edits the numbers)
+  if (s.rows.length && s.cols.some(c => c.total)) {
+    const row = ws.getRow(last + 1);
+    row.height = 24;
+    s.cols.forEach((c, j) => {
+      const cell = row.getCell(j + 1);
+      const letter = ws.getColumn(j + 1).letter;
+      if (c.total) cell.value = { formula: `SUM(${letter}${first}:${letter}${last})` };
+      cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: C.ink } };
+      cell.fill = fill(C.totalFill);
+      cell.border = { top: { style: 'medium', color: { argb: C.primary } }, bottom: thin(C.line) };
+      cell.alignment = { vertical: 'middle', horizontal: c.total ? 'right' : 'left', indent: c.total ? 0 : 1 };
+      if (c.type === 'money') cell.numFmt = INR;
+      else if (c.total) cell.numFmt = '#,##0';
+    });
+    row.getCell(1).value = s.totalLabel ?? 'Total';
+  }
+
+  if (!s.rows.length) {
+    ws.mergeCells(first, 1, first, n);
+    Object.assign(ws.getCell(first, 1), { value: 'No records for this period.', font: { italic: true, color: { argb: C.soft } } });
+  } else {
+    ws.autoFilter = { from: { row: HEADER_ROW, column: 1 }, to: { row: last, column: n } };
+  }
+  ws.views = [{ state: 'frozen', ySplit: HEADER_ROW, xSplit: s.freezeCols ?? 0, showGridLines: false }];
+
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${s.filename}"`);
   await wb.xlsx.write(res);
   res.end();
 }
 
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const STATUS_LABEL: Record<string, string> = { SENT: 'Sent', NOT_SENT: 'Not sent', CALLING: 'Calling', NOT_STARTED: 'Not started' };
+const toDate = (d: string | null) => (d ? dateOnly(d) : null);
+const periodText = (from: string, to: string) =>
+  from === to ? `${humanDate(from)} ${from.slice(0, 4)}` : `${humanDate(from)} to ${humanDate(to)} ${to.slice(0, 4)}`;
+
+// ---------- Daily report ----------
+
+const REPORT: Record<string, [string, Tone]> = { SENT: ['Sent', 'green'], NOT_SENT: ['Not sent', 'red'], CALLING: ['Calling', 'blue'], NOT_STARTED: ['Not started', 'red'], ON_LEAVE: ['On leave', 'violet'] };
 
 exportsRouter.get('/daily.xlsx', async (req, res) => {
   const today = todayIST();
   const { from = today, to = from } = z.object({ from: dateStr.optional(), to: dateStr.optional() }).parse(req.query);
   const rows = await dailyReportRows(from, to);
-  await sendSheet(res, `daily-report-${from}${to !== from ? `-to-${to}` : ''}.xlsx`, 'Daily report', [
-    { header: 'Employee ID', key: 'id' }, { header: 'BDE', key: 'name', width: 22 }, { header: 'Report', key: 'status' },
-    { header: 'Interested', key: 'i' }, { header: 'Call back later', key: 'c' }, { header: 'Not interested', key: 'n' },
-    { header: 'No answer', key: 'a' }, { header: 'Total calls', key: 't' }, { header: 'Target', key: 'target' }
-  ], rows.map(r => ({
-    id: r.bde.employeeId, name: r.bde.name, status: STATUS_LABEL[r.status],
-    i: r.counts.INTERESTED, c: r.counts.CALL_BACK, n: r.counts.NOT_INTERESTED, a: r.counts.NO_ANSWER, t: r.total, target: r.target
-  })));
+  type R = (typeof rows)[number];
+  await sendSheet<R>(res, {
+    filename: `daily-report-${from}${to !== from ? `-to-${to}` : ''}.xlsx`,
+    title: 'Daily calling report',
+    subtitle: `${periodText(from, to)}. ${rows.length} BDEs.`,
+    rows,
+    freezeCols: 2,
+    cols: [
+      { header: 'Employee ID', value: r => r.bde.employeeId, width: 13 },
+      { header: 'BDE', value: r => r.bde.name, width: 20 },
+      { header: 'Report', value: r => REPORT[r.status][0], type: 'center', width: 13, tone: r => REPORT[r.status][1] },
+      { header: 'Interested', value: r => r.counts.INTERESTED, type: 'int', total: true },
+      { header: 'Call back later', value: r => r.counts.CALL_BACK, type: 'int', total: true },
+      { header: 'Not interested', value: r => r.counts.NOT_INTERESTED, type: 'int', total: true },
+      { header: 'No answer', value: r => r.counts.NO_ANSWER, type: 'int', total: true },
+      { header: 'Total calls', value: r => r.total, type: 'int', total: true },
+      { header: 'Target', value: r => r.target, type: 'int', total: true },
+      { header: 'Against target', value: r => (r.target ? Math.round((r.total / r.target) * 100) / 100 : 0), type: 'percent', width: 15,
+        tone: r => (r.total >= r.target ? 'green' : r.total < r.target * 0.6 ? 'amber' : null) },
+      // The BDE's note only exists for a single day
+      ...(from === to ? [{ header: 'Note from BDE', value: (r: R) => r.note ?? '', width: 45 }] : [])
+    ]
+  });
 });
+
+// ---------- Attendance ----------
+
+/** Letter shown in each day cell, and its colour */
+const DAY: Record<DayStatus, [string, Tone | null]> = {
+  PRESENT: ['P', 'green'], LATE: ['L', 'amber'], LEAVE: ['LV', 'violet'], ABSENT: ['A', 'red'],
+  NOT_IN: ['–', null], OFF: ['–', 'grey'], UPCOMING: ['', null]
+};
+
+exportsRouter.get('/attendance.xlsx', async (req, res) => {
+  const { month = todayIST().slice(0, 7) } = z.object({ month: z.string().regex(/^\d{4}-\d{2}$/).optional() }).parse(req.query);
+  const data = await attendanceMonth(month);
+  const monthName = dateOnly(data.from).toLocaleDateString('en-IN', { timeZone: 'UTC', month: 'long', year: 'numeric' });
+  type R = (typeof data.rows)[number];
+  await sendSheet<R>(res, {
+    filename: `attendance-${month}.xlsx`,
+    title: `Attendance, ${monthName}`,
+    subtitle: `P = present, L = late (started after ${data.lateAfter}), LV = leave, A = absent, – = Sunday or not in yet. ${data.rows.length} BDEs.`,
+    rows: data.rows,
+    freezeCols: 2,
+    cols: [
+      { header: 'Employee ID', value: r => r.bde.employeeId, width: 13 },
+      { header: 'BDE', value: r => r.bde.name, width: 20 },
+      ...data.dates.map((d, i) => ({
+        header: String(Number(d.slice(8))), type: 'center' as const, width: 4.5,
+        value: (r: R) => DAY[r.cells[i].status][0],
+        tone: (r: R) => DAY[r.cells[i].status][1]
+      })),
+      { header: 'Present', value: r => r.totals.present, type: 'int', total: true, width: 9 },
+      { header: 'Late', value: r => r.totals.late, type: 'int', total: true, width: 7 },
+      { header: 'Leave', value: r => r.totals.leave, type: 'int', total: true, width: 7 },
+      { header: 'Absent', value: r => r.totals.absent, type: 'int', total: true, width: 8 },
+      { header: 'Hours', value: r => r.totals.hours, type: 'center', width: 8 }
+    ]
+  });
+});
+
+// ---------- Monthly performance ----------
 
 exportsRouter.get('/monthly.xlsx', async (req, res) => {
   const { month = todayIST().slice(0, 7) } = z.object({ month: z.string().regex(/^\d{4}-\d{2}$/).optional() }).parse(req.query);
-  const r = monthRange(month);
-  const [bdes, byBde] = await Promise.all([db.user.findMany({ where: { role: 'BDE' }, orderBy: { employeeId: 'asc' } }), statsByBde(r.from, r.to)]);
-  await sendSheet(res, `monthly-performance-${month}.xlsx`, `Performance ${month}`, [
-    { header: 'Employee ID', key: 'id' }, { header: 'BDE', key: 'name', width: 22 },
-    { header: 'Total calls', key: 'calls' }, { header: 'Interested leads', key: 'interested' },
-    { header: 'Interviews attended', key: 'attended' }, { header: 'Payment commitments', key: 'committed' },
-    { header: 'Successful payments', key: 'paid' }, { header: 'Revenue', key: 'revenue', money: true },
-    { header: 'Days on target', key: 'days' }
-  ], bdes.map(b => ({ b, s: byBde.get(b.id)! }))
+  const range = monthRange(month);
+  const to = range.to > todayIST() ? todayIST() : range.to;
+  const [bdes, byBde] = await Promise.all([db.user.findMany({ where: { role: 'BDE' }, orderBy: { employeeId: 'asc' } }), statsByBde(range.from, to)]);
+  const rows = bdes.map(b => ({ b, s: byBde.get(b.id)! }))
     .filter(x => x.b.active || x.s.calls || x.s.revenue)
-    .sort((a, b) => b.s.revenue - a.s.revenue)
-    .map(({ b, s }) => ({ id: b.employeeId, name: b.name, ...s, days: `${s.daysOnTarget} of ${s.daysWorked}` })));
+    .sort((a, b) => b.s.revenue - a.s.revenue || b.s.calls - a.s.calls);
+  const monthName = dateOnly(range.from).toLocaleDateString('en-IN', { timeZone: 'UTC', month: 'long', year: 'numeric' });
+  type R = (typeof rows)[number];
+  await sendSheet<R>(res, {
+    filename: `monthly-performance-${month}.xlsx`,
+    title: `Monthly performance report, ${monthName}`,
+    subtitle: `${periodText(range.from, to)}. ${rows.length} BDEs, ranked by revenue. Revenue counts verified payments only.`,
+    rows,
+    freezeCols: 3,
+    totalLabel: 'Team total',
+    cols: [
+      { header: 'Rank', value: r => rows.indexOf(r) + 1, type: 'center', width: 7, tone: r => (rows.indexOf(r) < 3 && r.s.revenue > 0 ? 'blue' : null) },
+      { header: 'Employee ID', value: r => r.b.employeeId, width: 13 },
+      { header: 'BDE', value: r => r.b.name, width: 20 },
+      { header: 'Total calls', value: r => r.s.calls, type: 'int', total: true },
+      { header: 'Interested leads', value: r => r.s.interested, type: 'int', total: true },
+      { header: 'Interviews attended', value: r => r.s.attended, type: 'int', total: true },
+      { header: 'Payment commitments', value: r => r.s.committed, type: 'int', total: true },
+      { header: 'Successful payments', value: r => r.s.paid, type: 'int', total: true },
+      { header: 'Revenue', value: r => r.s.revenue, type: 'money', total: true, width: 15 },
+      { header: 'Days on target', value: r => `${r.s.daysOnTarget} of ${r.s.daysWorked}`, type: 'center', width: 13,
+        tone: r => (r.s.daysWorked && r.s.daysOnTarget / r.s.daysWorked >= 0.8 ? 'green' : null) }
+    ]
+  });
 });
 
+// ---------- Leads ----------
+
+const STAGE_TONE: Record<string, Tone> = {
+  NEW: 'grey', INTERESTED: 'blue', FOLLOW_UP: 'amber', INTERVIEW_SCHEDULED: 'violet', SELECTED: 'green',
+  PAYMENT_COMMITTED: 'amber', PAID: 'green', NOT_INTERESTED: 'grey'
+};
+
 exportsRouter.get('/leads.xlsx', async (_req, res) => {
-  const list = await db.lead.findMany({ include: { course: true, owner: true }, orderBy: { createdAt: 'desc' } });
-  await sendSheet(res, `leads-${todayIST()}.xlsx`, 'Leads', [
-    { header: 'Lead ID', key: 'id' }, { header: 'Candidate', key: 'name', width: 22 }, { header: 'Phone', key: 'phone', width: 16 },
-    { header: 'Course or internship', key: 'course', width: 28 }, { header: 'BDE', key: 'bde', width: 18 }, { header: 'Status', key: 'stage', width: 20 },
-    { header: 'Follow-up', key: 'fu' }, { header: 'Next action', key: 'next', width: 40 }, { header: 'Added on', key: 'added' }
-  ], list.map(l => ({
-    id: l.id, name: l.name, phone: formatPhone(l.phone), course: l.course.name, bde: l.owner.name, stage: STAGE_LABEL[l.stage],
-    fu: ymd(l.followUpOn) ?? '', next: l.nextAction ?? '', added: ymd(l.createdAt)
-  })));
+  const list = await db.lead.findMany({ include: { course: true, owner: true }, orderBy: [{ followUpOn: { sort: 'asc', nulls: 'last' } }, { createdAt: 'desc' }] });
+  const today = todayIST();
+  const open = (l: (typeof list)[number]) => !['PAID', 'NOT_INTERESTED'].includes(l.stage);
+  type R = (typeof list)[number];
+  await sendSheet<R>(res, {
+    filename: `leads-${today}.xlsx`,
+    title: 'All leads',
+    subtitle: `${list.length} leads as of ${periodText(today, today)}. Overdue follow-ups are in red.`,
+    rows: list,
+    freezeCols: 2,
+    cols: [
+      { header: 'Lead ID', value: r => `L-${r.id}`, type: 'center', width: 9 },
+      { header: 'Candidate', value: r => r.name, width: 22 },
+      { header: 'Phone', value: r => formatPhone(r.phone), width: 17 },
+      { header: 'Course or internship', value: r => r.course.name, width: 28 },
+      { header: 'BDE', value: r => r.owner.name, width: 16 },
+      { header: 'Status', value: r => STAGE_LABEL[r.stage], type: 'center', width: 20, tone: r => STAGE_TONE[r.stage] },
+      { header: 'Follow-up', value: r => toDate(ymd(r.followUpOn)), type: 'date',
+        tone: r => (r.followUpOn && open(r) && ymd(r.followUpOn)! < today ? 'red' : null) },
+      { header: 'Next action', value: r => r.nextAction ?? '', width: 40 },
+      { header: 'Added on', value: r => toDate(ymd(r.createdAt)), type: 'date' }
+    ]
+  });
 });
+
+// ---------- Payments ----------
+
+const PAY: Record<string, [string, Tone]> = { PROMISED: ['Promised', 'amber'], PARTIALLY_PAID: ['Partially paid', 'blue'], PAID: ['Paid', 'green'] };
+const CHECK: Record<string, [string, Tone]> = { TO_VERIFY: ['To verify', 'amber'], VERIFIED: ['Verified', 'green'], REJECTED: ['Rejected', 'red'] };
 
 exportsRouter.get('/payments.xlsx', async (_req, res) => {
   const list = await db.payment.findMany({ include: { lead: { include: { course: true, owner: true } } }, orderBy: { date: 'desc' } });
-  const STATUS: Record<string, string> = { PROMISED: 'Promised', PARTIALLY_PAID: 'Partially paid', PAID: 'Paid' };
-  const CHECK: Record<string, string> = { TO_VERIFY: 'To verify', VERIFIED: 'Verified', REJECTED: 'Rejected' };
-  await sendSheet(res, `payments-${todayIST()}.xlsx`, 'Payments', [
-    { header: 'Payment ID', key: 'id' }, { header: 'Candidate', key: 'name', width: 22 }, { header: 'Course', key: 'course', width: 28 },
-    { header: 'BDE', key: 'bde', width: 18 }, { header: 'Amount', key: 'amount', money: true }, { header: 'Date', key: 'date' },
-    { header: 'Status', key: 'status' }, { header: 'Receipt check', key: 'check' }, { header: 'Note', key: 'note', width: 40 }
-  ], list.map(p => ({
-    id: p.id, name: p.lead.name, course: p.lead.course.name, bde: p.lead.owner.name, amount: p.amount, date: ymd(p.date),
-    status: STATUS[p.status], check: p.check ? CHECK[p.check] : '', note: p.rejectReason ? `Rejected: ${p.rejectReason}` : p.note ?? ''
-  })));
+  const today = todayIST();
+  type R = (typeof list)[number];
+  await sendSheet<R>(res, {
+    filename: `payments-${today}.xlsx`,
+    title: 'All payments',
+    subtitle: `${list.length} records as of ${periodText(today, today)}. Promised = not paid yet. Only verified receipts count as revenue.`,
+    rows: list,
+    freezeCols: 2,
+    cols: [
+      { header: 'Payment ID', value: r => `P-${r.id}`, type: 'center', width: 11 },
+      { header: 'Candidate', value: r => r.lead.name, width: 22 },
+      { header: 'Course', value: r => r.lead.course.name, width: 28 },
+      { header: 'BDE', value: r => r.lead.owner.name, width: 16 },
+      { header: 'Amount', value: r => r.amount, type: 'money', width: 13 },
+      { header: 'Date', value: r => toDate(ymd(r.date)), type: 'date' },
+      { header: 'Status', value: r => PAY[r.status][0], type: 'center', width: 15, tone: r => PAY[r.status][1] },
+      { header: 'Receipt check', value: r => (r.check ? CHECK[r.check][0] : ''), type: 'center', width: 14, tone: r => (r.check ? CHECK[r.check][1] : null) },
+      { header: 'Note', value: r => (r.rejectReason ? `Rejected: ${r.rejectReason}` : r.note ?? ''), width: 40 }
+    ]
+  });
 });

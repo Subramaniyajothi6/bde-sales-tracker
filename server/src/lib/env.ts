@@ -11,6 +11,8 @@ const schema = z.object({
   STORAGE_DRIVER: z.enum(['local']).default('local'),
   UPLOAD_DIR: z.string().default('./uploads'),
   REPORT_CUTOFF: z.string().regex(/^\d{2}:\d{2}$/).default('19:30'),
+  /** Punching in after this time (India time) counts as late */
+  LATE_AFTER: z.string().regex(/^\d{2}:\d{2}$/).default('10:00'),
   WEB_DIST: z.string().optional()
 });
 

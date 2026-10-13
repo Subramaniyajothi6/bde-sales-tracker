@@ -1,11 +1,14 @@
 import { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError, type Stage } from '../../api';
 import { errorText, useLoad, useToast } from '../../lib/hooks';
 import { STAGES, STAGE_LABEL, addDays, rupee, todayIST } from '../../lib/format';
 import { Badge, Due, Empty, ErrorNote, Icons, Loading, Modal } from '../../components/ui';
+import { PageHead } from '../../components/PageHead';
 
 type View = 'due' | 'active' | 'all';
+// "Interview scheduled" and "Paid" follow a booking or a verified fee; "New" is for imported numbers not called yet
+const NEW_LEAD_STAGES = STAGES.filter(s => s !== 'NEW' && s !== 'INTERVIEW_SCHEDULED' && s !== 'PAID');
 
 export default function Leads() {
   const [params, setParams] = useSearchParams();
@@ -13,6 +16,7 @@ export default function Leads() {
   const [q, setQ] = useState('');
   const { data, error, reload } = useLoad(() => api.leads.list({ view, q: q.trim() || undefined }), [view, q]);
   const [adding, setAdding] = useState(params.get('add') === '1');
+  const nav = useNavigate();
 
   const setView = (v: View) => setParams(p => { p.set('view', v); p.delete('add'); return p; }, { replace: true });
   const chips: [View, string, number | undefined][] = [
@@ -22,29 +26,41 @@ export default function Leads() {
 
   return (
     <>
-      <section className="bde-head">
-        <h1>My leads</h1>
-        <p>{data ? `${data.counts.due} to call today` : ' '}</p>
-      </section>
-      <main className="bde-main">
-        <label className="sr-only" htmlFor="q">Search my leads</label>
-        <input className="input" id="q" type="search" placeholder="Search name or phone" value={q} onChange={e => setQ(e.target.value)} />
-        <div className="chips" role="group" aria-label="Show">
-          {chips.map(([k, label, n]) => (
-            <button key={k} type="button" className="chip" aria-pressed={view === k} onClick={() => setView(k)}>{label} {n !== undefined && <b>{n}</b>}</button>
-          ))}
-        </div>
-        <div className="card-list">
-          {error ? <ErrorNote error={error} onRetry={reload} /> : !data ? <Loading /> : data.leads.map(l => (
-            <Link className="list-row" to={`/bde/leads/${l.id}`} key={l.id}>
-              <span className="grow-1"><b>{l.name}</b>{l.nextAction && <span className="sub" style={{ display: 'block' }}>{l.nextAction}</span>}</span>
-              <span className="end"><Badge label={STAGE_LABEL[l.stage]} />{l.followUpOn && <Due date={l.followUpOn} />}</span>
-            </Link>
-          ))}
-          {data && !data.leads.length && <Empty title={view === 'due' ? 'Nothing due right now' : 'No leads here'}>{view === 'due' ? '' : 'Tap + to add a candidate.'}</Empty>}
-        </div>
+      <PageHead title="My leads" sub={data ? `${data.counts.due} to call today, ${data.counts.active} active` : undefined}
+        tools={<button type="button" className="btn" onClick={() => setAdding(true)}>{Icons.plusSm}Add a lead</button>} />
+      <main className="wrap">
+        <section className="panel">
+          <div className="toolbar">
+            <div className="chips" role="group" aria-label="Show">
+              {chips.map(([k, label, n]) => (
+                <button key={k} type="button" className="chip" aria-pressed={view === k} onClick={() => setView(k)}>{label} {n !== undefined && <b>{n}</b>}</button>
+              ))}
+            </div>
+            <span className="spacer" />
+            <label className="sr-only" htmlFor="q">Search my leads</label>
+            <input className="input search" id="q" type="search" placeholder="Search name or phone" value={q} onChange={e => setQ(e.target.value)} />
+          </div>
+          {error ? <ErrorNote error={error} onRetry={reload} /> : !data ? <Loading /> : (
+            <div className="scroll">
+              <table className="data stack">
+                <thead><tr><th scope="col">Candidate</th><th scope="col">Course</th><th scope="col">Status</th><th scope="col">Follow-up</th><th scope="col">Next action</th></tr></thead>
+                <tbody>
+                  {data.leads.map(l => (
+                    <tr key={l.id} className="click" tabIndex={0} onClick={() => nav(`/bde/leads/${l.id}`)} onKeyDown={e => { if (e.key === 'Enter') nav(`/bde/leads/${l.id}`); }}>
+                      <td className="who" data-label="Candidate"><b>{l.name}</b><small>{l.phone}</small></td>
+                      <td data-label="Course">{l.course.name}</td>
+                      <td data-label="Status"><Badge label={STAGE_LABEL[l.stage]} /></td>
+                      <td data-label="Follow-up">{l.followUpOn ? <Due date={l.followUpOn} /> : <span className="muted">–</span>}</td>
+                      <td className="next-cell" data-label="Next action">{l.nextAction ?? <span className="muted">–</span>}</td>
+                    </tr>
+                  ))}
+                  {!data.leads.length && <tr><td colSpan={5}><Empty title={view === 'due' ? 'Nothing due right now' : 'No leads here'}>{view === 'due' ? '' : 'Use "Add a lead" to add a candidate.'}</Empty></td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </main>
-      <button type="button" className="fab" aria-label="Add a lead" onClick={() => setAdding(true)}>{Icons.plus}</button>
       <AddLead open={adding} onClose={() => { setAdding(false); if (params.get('add')) setParams(p => { p.delete('add'); return p; }, { replace: true }); }} onAdded={reload} />
     </>
   );
@@ -82,8 +98,10 @@ function AddLead({ open, onClose, onAdded }: { open: boolean; onClose: () => voi
   return (
     <Modal open={open} title="Add a lead" onClose={onClose} onSubmit={save}
       footer={<><button type="button" className="btn ghost" onClick={onClose}>Cancel</button><button type="submit" className="btn" disabled={busy}>Save lead</button></>}>
-      <label className="field">Candidate name<input className="input" value={f.name} onChange={set('name')} autoComplete="off" autoFocus /></label>
-      <label className="field">Mobile number<input className="input" value={f.phone} onChange={set('phone')} inputMode="tel" placeholder="98xxx xxxxx" /></label>
+      <div className="form-grid">
+        <label className="field">Candidate name<input className="input" value={f.name} onChange={set('name')} autoComplete="off" autoFocus /></label>
+        <label className="field">Mobile number<input className="input" value={f.phone} onChange={set('phone')} inputMode="tel" placeholder="98xxx xxxxx" /></label>
+      </div>
       <label className="field">Course or internship
         <select className="select" value={f.courseId} onChange={set('courseId')}>
           <option value="">Choose…</option>
@@ -91,10 +109,10 @@ function AddLead({ open, onClose, onAdded }: { open: boolean; onClose: () => voi
         </select>
       </label>
       <label className="field">Status
-        <select className="select" value={f.stage} onChange={set('stage')}>{STAGES.map(s => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}</select>
+        <select className="select" value={f.stage} onChange={set('stage')}>{NEW_LEAD_STAGES.map(s => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}</select>
       </label>
       <div className="form-grid">
-        <label className="field">Follow-up date<input className="input" type="date" value={f.followUpOn} onChange={set('followUpOn')} /></label>
+        <label className="field">Follow-up date<input className="input" type="date" min={todayIST()} value={f.followUpOn} onChange={set('followUpOn')} /></label>
         <label className="field">Next action<input className="input" value={f.nextAction} onChange={set('nextAction')} placeholder="e.g. Send fee details" /></label>
       </div>
       {err && <span className="err" role="alert">{err} {dupId && <button type="button" className="linkbtn inline" onClick={() => nav(`/bde/leads/${dupId}`)}>Open it</button>}</span>}

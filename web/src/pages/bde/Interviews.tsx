@@ -4,6 +4,7 @@ import { api, type Interview } from '../../api';
 import { errorText, useLoad, useToast } from '../../lib/hooks';
 import { INTERVIEW_LABEL, RESULT_LABEL, fmtDate, fmtTime, istDate, todayIST } from '../../lib/format';
 import { Badge, Empty, ErrorNote, Loading } from '../../components/ui';
+import { PageHead } from '../../components/PageHead';
 
 type When = 'today' | 'upcoming' | 'past';
 
@@ -18,52 +19,56 @@ export default function Interviews() {
     try { await api.interviews.mark(i.id, b); toast(msg); await reload(); } catch (e) { toast(errorText(e)); } finally { setBusy(false); }
   }
 
+  /** What the BDE can do next with this interview */
+  function actions(i: Interview) {
+    const d = istDate(i.scheduledAt);
+    if (i.status === 'SCHEDULED' && d <= todayIST()) return (
+      <><span className="small act-q">Did {i.lead.name.split(' ')[0]} come?</span>
+        <button type="button" className="btn sm" disabled={busy} onClick={() => mark(i, { status: 'ATTENDED' }, `${i.lead.name} attended`)}>Attended</button>
+        <button type="button" className="btn ghost sm" disabled={busy} onClick={() => mark(i, { status: 'NO_SHOW' }, `${i.lead.name} missed it. Follow-up set for tomorrow.`)}>Didn't come</button></>);
+    if (i.status === 'ATTENDED' && !i.result) return (
+      <><span className="small act-q">Result?</span>
+        <button type="button" className="btn sm" disabled={busy} onClick={() => mark(i, { result: 'SELECTED' }, `${i.lead.name}: selected`)}>Selected</button>
+        <button type="button" className="btn ghost sm" disabled={busy} onClick={() => mark(i, { result: 'NOT_SELECTED' }, `${i.lead.name}: not selected`)}>Not selected</button></>);
+    if (i.result === 'SELECTED' && i.lead.stage === 'SELECTED') return <Link className="btn sm" to={`/bde/payments/new?lead=${i.lead.id}`}>Record payment</Link>;
+    if (i.status === 'NO_SHOW') return <Link className="btn ghost sm" to={`/bde/leads/${i.lead.id}`}>Reschedule</Link>;
+    return null;
+  }
+
   return (
     <>
-      <section className="bde-head"><h1>My interviews</h1></section>
-      <main className="bde-main">
-        <div className="seg" role="group" aria-label="Show" style={{ width: '100%' }}>
+      <PageHead title="My interviews" tools={
+        <div className="seg" role="group" aria-label="Show">
           {(['today', 'upcoming', 'past'] as When[]).map(w => (
-            <button key={w} type="button" style={{ flex: 1 }} aria-pressed={when === w} onClick={() => setWhen(w)}>{w[0].toUpperCase() + w.slice(1)}</button>
+            <button key={w} type="button" aria-pressed={when === w} onClick={() => setWhen(w)}>{w[0].toUpperCase() + w.slice(1)}</button>
           ))}
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {error ? <ErrorNote error={error} onRetry={reload} /> : !data ? <Loading /> : data.interviews.map(i => {
-            const first = i.lead.name.split(' ')[0];
-            const d = istDate(i.scheduledAt);
-            const [hm, ap] = fmtTime(i.scheduledAt).split(' ');
-            let acts = null;
-            if (i.status === 'SCHEDULED' && d <= todayIST()) acts = (
-              <><p className="small" style={{ margin: 0, fontWeight: 600 }}>Did {first} come?</p>
-                <div className="iv-acts">
-                  <button type="button" className="btn" disabled={busy} onClick={() => mark(i, { status: 'ATTENDED' }, `${i.lead.name} attended`)}>Attended</button>
-                  <button type="button" className="btn ghost" disabled={busy} onClick={() => mark(i, { status: 'NO_SHOW' }, `${i.lead.name} missed it. Follow-up set for tomorrow.`)}>Didn't come</button>
-                </div></>);
-            else if (i.status === 'ATTENDED' && !i.result) acts = (
-              <><p className="small" style={{ margin: 0, fontWeight: 600 }}>Result?</p>
-                <div className="iv-acts">
-                  <button type="button" className="btn" disabled={busy} onClick={() => mark(i, { result: 'SELECTED' }, `${i.lead.name}: selected`)}>Selected</button>
-                  <button type="button" className="btn ghost" disabled={busy} onClick={() => mark(i, { result: 'NOT_SELECTED' }, `${i.lead.name}: not selected`)}>Not selected</button>
-                </div></>);
-            else if (i.result === 'SELECTED' && i.lead.stage === 'SELECTED') acts = (
-              <div className="iv-acts"><Link className="btn" to={`/bde/payments/new?lead=${i.lead.id}`}>Record payment</Link><Link className="btn ghost" to={`/bde/leads/${i.lead.id}`}>Follow up</Link></div>);
-            else if (i.status === 'NO_SHOW') acts = (
-              <div className="iv-acts"><Link className="btn ghost" to={`/bde/leads/${i.lead.id}`}>Reschedule</Link><a className="btn ghost" href={`tel:+${i.lead.phone.replace(/\D/g, '')}`}>Call</a></div>);
-            return (
-              <article className="iv" key={i.id}>
-                <div className="iv-top">
-                  <div className="iv-when"><span className="digits">{hm}</span><small>{ap}, {d === todayIST() ? 'today' : fmtDate(d)}</small></div>
-                  <Link to={`/bde/leads/${i.lead.id}`} style={{ flex: 1, textDecoration: 'none', color: 'inherit' }}><b style={{ display: 'block', fontSize: 15, fontWeight: 600 }}>{i.lead.name}</b></Link>
-                  <span style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-                    <Badge label={INTERVIEW_LABEL[i.status]} />{i.result && <Badge label={RESULT_LABEL[i.result]} />}
-                  </span>
-                </div>
-                {acts}
-              </article>
-            );
-          })}
-          {data && !data.interviews.length && <div className="panel"><Empty title={when === 'today' ? 'No interviews today' : when === 'upcoming' ? 'Nothing scheduled yet' : 'No past interviews'} /></div>}
-        </div>
+        </div>} />
+      <main className="wrap">
+        <section className="panel">
+          {error ? <ErrorNote error={error} onRetry={reload} /> : !data ? <Loading /> : (
+            <div className="scroll">
+              <table className="data stack">
+                <thead><tr><th scope="col">When</th><th scope="col">Candidate</th><th scope="col">Course</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                  {data.interviews.map(i => {
+                    const d = istDate(i.scheduledAt);
+                    return (
+                      <tr key={i.id}>
+                        <td data-label="When"><b>{d === todayIST() ? 'Today' : fmtDate(d, true)}</b> <span className="muted">{fmtTime(i.scheduledAt)}</span></td>
+                        <td className="who" data-label="Candidate"><Link to={`/bde/leads/${i.lead.id}`}><b>{i.lead.name}</b></Link><small>{i.lead.phone}</small></td>
+                        <td data-label="Course">{i.lead.course}</td>
+                        <td data-label="Status"><span className="badges"><Badge label={INTERVIEW_LABEL[i.status]} />{i.result && <Badge label={RESULT_LABEL[i.result]} />}</span></td>
+                        <td className="acts-cell"><div className="iv-acts-row">{actions(i)}</div></td>
+                      </tr>
+                    );
+                  })}
+                  {!data.interviews.length && <tr><td colSpan={5}><Empty title={when === 'today' ? 'No interviews today' : when === 'upcoming' ? 'Nothing scheduled yet' : 'No past interviews'}>
+                    {when !== 'past' && 'Book one from a lead\'s page.'}</Empty></td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </main>
     </>
   );

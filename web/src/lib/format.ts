@@ -1,8 +1,8 @@
-import type { InterviewResult, InterviewStatus, Outcome, PaymentStatus, ReceiptCheck, ReportStatus, Stage } from '../api';
+import type { DayStatus, InterviewResult, InterviewStatus, LeaveStatus, LeaveType, Outcome, PaymentStatus, ReceiptCheck, ReportStatus, Stage } from '../api';
 
 /** Words shown on screen for the API's status values. Change wording here only. */
 export const STAGE_LABEL: Record<Stage, string> = {
-  INTERESTED: 'Interested', FOLLOW_UP: 'Follow-up', INTERVIEW_SCHEDULED: 'Interview scheduled', SELECTED: 'Selected',
+  NEW: 'New', INTERESTED: 'Interested', FOLLOW_UP: 'Follow-up', INTERVIEW_SCHEDULED: 'Interview scheduled', SELECTED: 'Selected',
   PAYMENT_COMMITTED: 'Payment committed', PAID: 'Paid', NOT_INTERESTED: 'Not interested'
 };
 export const STAGES = Object.keys(STAGE_LABEL) as Stage[];
@@ -14,7 +14,14 @@ export const INTERVIEW_LABEL: Record<InterviewStatus, string> = { SCHEDULED: 'Sc
 export const RESULT_LABEL: Record<InterviewResult, string> = { SELECTED: 'Selected', NOT_SELECTED: 'Not selected' };
 export const PAYMENT_LABEL: Record<PaymentStatus, string> = { PROMISED: 'Promised', PARTIALLY_PAID: 'Partially paid', PAID: 'Paid' };
 export const CHECK_LABEL: Record<ReceiptCheck, string> = { TO_VERIFY: 'To verify', VERIFIED: 'Verified', REJECTED: 'Rejected' };
-export const REPORT_LABEL: Record<ReportStatus, string> = { SENT: 'Sent', NOT_SENT: 'Not sent', CALLING: 'Calling', NOT_STARTED: 'Not started' };
+export const REPORT_LABEL: Record<ReportStatus, string> = { SENT: 'Sent', NOT_SENT: 'Not sent', CALLING: 'Calling', NOT_STARTED: 'Not started', ON_LEAVE: 'On leave' };
+export const LEAVE_TYPE_LABEL: Record<LeaveType, string> = { CASUAL: 'Casual', SICK: 'Sick', EMERGENCY: 'Emergency', OTHER: 'Other' };
+export const LEAVE_STATUS_LABEL: Record<LeaveStatus, string> = { PENDING: 'Waiting', APPROVED: 'Approved', REJECTED: 'Rejected', CANCELLED: 'Cancelled' };
+/** Attendance: word, and the short letter used in the month grid */
+export const DAY_LABEL: Record<DayStatus, [string, string]> = {
+  PRESENT: ['Present', 'P'], LATE: ['Late', 'L'], LEAVE: ['Leave', 'LV'], ABSENT: ['Absent', 'A'],
+  NOT_IN: ['Not in yet', '·'], OFF: ['Sunday', ''], UPCOMING: ['', '']
+};
 
 /** CSS class for a badge, e.g. "Payment committed" -> s-payment-committed (styles in base.css). */
 export const badgeClass = (label: string) => 's-' + label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -55,3 +62,9 @@ export function dueInfo(date: string | null | undefined): { text: string; cls: s
 
 export const initials = (name: string) => name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
 export const monthName = (m: string) => new Date(`${m}-01T00:00:00Z`).toLocaleDateString('en-IN', { timeZone: 'UTC', month: 'long', year: 'numeric' });
+
+/** "10:00" (24-hour) -> "10:00 am" */
+export function fmtClock(hm: string) {
+  const [h, m] = hm.split(':').map(Number);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+}

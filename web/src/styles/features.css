@@ -1,0 +1,164 @@
+/* Attendance, leave, chat, activity, lead import and install. Same tokens as base.css. */
+
+/* ---------- Badges for the new statuses ---------- */
+.s-new, .s-cancelled { background: var(--line-2); color: var(--soft); }
+.s-on-leave, .s-waiting { background: var(--violet-tint); color: var(--violet); }
+.s-approved { background: var(--green-tint); color: var(--green); }
+.sidebar .pill.blue { background: var(--primary-tint); color: var(--primary); }
+.count-pill { display: inline-block; margin-left: 8px; background: var(--amber-tint); color: var(--amber); font-size: 12px; font-weight: 600; padding: 0 8px; border-radius: 999px; line-height: 20px; vertical-align: 2px; }
+
+/* ---------- BDE: Today ---------- */
+.day-times { margin: 6px 0 0 !important; color: var(--green) !important; font-weight: 500; }
+.notice { background: var(--violet-tint); color: var(--violet); border-radius: 10px; padding: 12px 14px; font-weight: 500; }
+.start-day, .install { display: flex; align-items: center; gap: 12px; justify-content: space-between; background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--primary); border-radius: 10px; padding: 14px; box-shadow: var(--shadow); }
+.start-day > div, .install > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.start-day .btn, .install .btn { flex-shrink: 0; min-height: 44px; }
+.submitted { flex-wrap: wrap; }
+.sent-note { flex-basis: 100%; color: var(--ink); font-weight: 400; font-size: 13.5px; }
+.stats.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.stats.four .stat { padding: 10px; }
+
+
+/* ---------- Admin: attendance grid ---------- */
+.legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--soft); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+table.att-grid { min-width: 0; }
+table.att-grid th.day, table.att-grid td.day { padding: 4px 2px; width: 30px; min-width: 30px; text-align: center; }
+table.att-grid th.day.today { color: var(--primary); }
+table.att-grid .sticky { position: sticky; left: 0; background: var(--card); z-index: 1; min-width: 150px; box-shadow: 1px 0 0 var(--line); }
+table.att-grid td.who a { color: inherit; text-decoration: none; }
+table.att-grid td.who a:hover { color: var(--primary); }
+i.d { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 5px; font-style: normal; font-size: 11px; font-weight: 600; }
+.d-present { background: var(--green-tint); color: var(--green); }
+.d-late { background: var(--amber-tint); color: var(--amber); }
+.d-leave { background: var(--violet-tint); color: var(--violet); }
+.d-absent { background: var(--red-tint); color: var(--red); }
+.d-not-in { color: var(--faint); border: 1px dashed var(--line); }
+.d-off { background: var(--line-2); }
+.d-upcoming { background: transparent; }
+.row-acts { display: flex; gap: 8px; flex-shrink: 0; }
+
+/* ---------- Admin: daily report note ---------- */
+.report-note { display: block; max-width: 340px; color: var(--soft); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- Admin: activity log ---------- */
+.day-sep { display: flex; align-items: center; gap: 10px; margin: 14px 0 6px; color: var(--soft); font-size: 12.5px; font-weight: 600; }
+.day-sep::before, .day-sep::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+.activity { padding: 4px 20px 12px; }
+.act-row { display: flex; gap: 16px; padding: 8px 0; border-top: 1px solid var(--line-2); }
+.act-row .t { width: 70px; flex-shrink: 0; color: var(--soft); font-variant-numeric: tabular-nums; font-size: 13px; padding-top: 1px; }
+.act-row b { font-weight: 600; }
+.act-row .sub { display: block; color: var(--soft); font-size: 13px; }
+
+/* ---------- Admin: import leads ---------- */
+.import-check { display: flex; flex-direction: column; gap: 10px; background: var(--hover); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.ok-text { color: var(--green); }
+.warn-text { color: var(--amber); }
+table.data.compact { min-width: 0; font-size: 13px; }
+table.data.compact td, table.data.compact th { height: auto; padding: 6px 10px; }
+.skipped { margin: 8px 0 0; padding-left: 18px; max-height: 180px; overflow: auto; font-size: 13px; }
+details summary { cursor: pointer; color: var(--primary); font-weight: 500; }
+
+/* ---------- Chat ---------- */
+.person .av, .thread-head .av { width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; background: var(--line-2); color: var(--ink); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; }
+.av.admin { background: var(--primary-tint); color: var(--primary); }
+.person .grow-1 b { display: flex; align-items: center; gap: 6px; }
+.person.on { background: var(--primary-tint); }
+.role-tag { font-size: 11px; font-weight: 600; color: var(--primary); background: var(--primary-tint); border-radius: 4px; padding: 0 6px; line-height: 18px; }
+.unread { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--primary); color: #fff; font-size: 12px; font-weight: 600; line-height: 22px; text-align: center; }
+
+.thread { display: flex; flex-direction: column; min-height: 0; }
+.thread-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.thread-head > span:last-child { display: flex; flex-direction: column; line-height: 1.3; }
+.thread-head small { font-size: 12.5px; }
+.back-link { font-size: 26px; line-height: 1; text-decoration: none; color: var(--primary); padding: 0 6px 2px 0; }
+.messages { flex: 1; overflow-y: auto; padding: 8px 16px 16px; display: flex; flex-direction: column; }
+.msg { max-width: 78%; margin: 3px 0; padding: 8px 12px 6px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); align-self: flex-start; overflow-wrap: anywhere; }
+.msg p { margin: 0; white-space: pre-wrap; }
+.msg small { display: block; text-align: right; font-size: 11px; color: var(--faint); margin-top: 2px; }
+.msg.mine { align-self: flex-end; background: var(--primary); border-color: var(--primary); color: #fff; }
+.msg.mine small { color: rgba(255, 255, 255, .75); }
+.messages > div { display: flex; flex-direction: column; }
+.composer { display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid var(--line); background: var(--card); }
+.composer .textarea { min-height: 44px; max-height: 120px; resize: none; }
+.composer .btn { min-height: 44px; }
+.composer-off { padding: 12px 16px; margin: 0; border-top: 1px solid var(--line); }
+
+
+/* Admin: list and conversation side by side */
+.chat-layout { display: grid; grid-template-columns: 320px minmax(0, 1fr); height: calc(100dvh - 150px); min-height: 460px; overflow: hidden; }
+.chat-list { border-right: 1px solid var(--line); overflow-y: auto; padding: 12px; }
+.chat-list .card-list { border: 0; }
+.chat-thread { display: flex; flex-direction: column; min-height: 0; }
+.chat-thread > .thread { flex: 1; }
+.chat-thread .back-link { display: none; }
+@media (max-width: 760px) {
+  .chat-layout { grid-template-columns: 1fr; height: calc(100dvh - 130px); }
+  .chat-layout.has-thread .chat-list, .chat-layout:not(.has-thread) .chat-thread { display: none; }
+  .chat-thread .back-link { display: inline; }
+}
+
+@media (max-width: 420px) {
+  .stats.four .digits { font-size: 19px; }
+  .start-day, .install { flex-direction: column; align-items: stretch; }
+}
+
+/* =========================================================
+   BDE screens as a web app (laptop first, works on phones)
+   ========================================================= */
+.col { display: flex; flex-direction: column; gap: 20px; }
+.ok-text { color: var(--green); }
+.of-inline { font-size: 15px; font-weight: 500; color: var(--soft); }
+.meter-sub { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+
+/* Call buttons: four in a row on a laptop, two by two on a phone */
+.pad { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.pad .lbl { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+kbd { font: 600 11px/1 'IBM Plex Sans', system-ui, sans-serif; color: var(--soft); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 3px 6px; background: var(--hover); }
+@media (hover: none) { kbd, .keys-hint { display: none; } }
+.log-row { padding: 0 12px 0 20px; }
+.notice-soft { background: var(--hover); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; color: var(--soft); }
+
+/* Lead page: follow-up date, next action and Save on one line */
+.next-step { grid-template-columns: 180px minmax(0, 1fr) auto; align-items: end; }
+.who a { color: inherit; text-decoration: none; }
+.who a:hover { color: var(--primary); }
+
+/* Interviews and payments tables */
+.badges { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.iv-acts-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; justify-content: flex-end; }
+.act-q { font-weight: 600; margin-right: 4px; }
+.reject-why { display: block; color: var(--red); margin-top: 4px; max-width: 280px; }
+
+/* Record payment: details left, receipt right */
+.pay-cols { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 28px; padding: 20px; }
+.pay-foot { align-items: center; }
+.pay-foot .err:empty { visibility: hidden; }
+.upload label { padding: 16px; text-align: center; }
+
+@media (max-width: 860px) {
+  .pay-cols { grid-template-columns: 1fr; gap: 20px; padding: 16px; }
+  .next-step { grid-template-columns: 1fr; }
+}
+
+/* Tables become cards on a phone, so nothing needs scrolling sideways */
+@media (max-width: 700px) {
+  /* !important: beats the wide-table minimums in pages.css */
+  table.data.stack { min-width: 0 !important; }
+  table.data.stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  table.data.stack, table.data.stack tbody, table.data.stack tr, table.data.stack td { display: block; width: 100%; }
+  table.data.stack tr { padding: 12px 16px; border-top: 1px solid var(--line); }
+  table.data.stack tbody tr:first-child { border-top: 0; }
+  table.data.stack td { height: auto; border: 0; padding: 3px 0 !important; display: flex; gap: 12px; justify-content: space-between; align-items: center; text-align: right; }
+  table.data.stack td[data-label]::before { content: attr(data-label); color: var(--soft); font-size: 13px; text-align: left; flex-shrink: 0; }
+  table.data.stack td.who { display: block; text-align: left; padding-bottom: 6px !important; }
+  table.data.stack td.who::before { content: none; }
+  table.data.stack td.acts-cell .iv-acts-row { justify-content: flex-start; padding-top: 6px; }
+  table.data.stack td[colspan] { display: block; text-align: center; }
+  .wrap .panel .toolbar .search { width: 100%; }
+}
+
+table.data td.next-cell { max-width: 320px; }
+@media (max-width: 700px) { table.data.stack td.next-cell { max-width: none; } }
+/* Sidebar: name, then employee ID, then Log out, each on its own line */
+.sidebar .user small { display: block; font-size: 12px; line-height: 1.3; }

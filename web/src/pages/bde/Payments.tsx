@@ -1,28 +1,51 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api';
 import { useLoad } from '../../lib/hooks';
 import { CHECK_LABEL, PAYMENT_LABEL, fmtDate, rupee, short } from '../../lib/format';
-import { Badge, Due, Empty, ErrorNote, Loading } from '../../components/ui';
+import { Badge, Due, Empty, ErrorNote, Loading, StatStrip } from '../../components/ui';
+import { PageHead } from '../../components/PageHead';
 
 export default function Payments() {
+  const nav = useNavigate();
   const promised = useLoad(() => api.payments.list('promised'));
   const received = useLoad(() => api.payments.list('received'));
   const s = promised.data?.summary;
+  const rToVerify = received.data?.payments.filter(p => p.check === 'TO_VERIFY').length ?? 0;
 
   return (
     <>
-      <section className="bde-head">
-        <h1>My payments</h1>
-        <div className="boxes">
-          <div className="good"><span className="digits">{s ? short(s.collectedThisMonth) : '–'}</span><small>verified this month</small></div>
-          <div><span className="digits">{s ? short(s.promisedAmount) : '–'}</span><small>promised, {s?.promisedCount ?? 0} candidate{s?.promisedCount === 1 ? '' : 's'}</small></div>
-        </div>
-      </section>
-      <main className="bde-main">
-        <Link className="btn block" to="/bde/payments/new" style={{ minHeight: 48 }}>Record payment</Link>
-        <section className="sec">
-          <div className="sec-head"><h2>Promised</h2></div>
-          <div className="card-list">
+      <PageHead title="My payments" tools={<Link className="btn" to="/bde/payments/new">Record payment</Link>}>
+        {s && <StatStrip items={[
+          { name: 'Verified this month', value: short(s.collectedThisMonth), sub: 'counts as your revenue' },
+          { name: 'Promised', value: short(s.promisedAmount), sub: `${s.promisedCount} candidate${s.promisedCount === 1 ? '' : 's'}` },
+          { name: 'Waiting for admin', value: rToVerify, sub: 'receipts not checked yet' }
+        ]} />}
+      </PageHead>
+      <main className="wrap">
+        <div className="row">
+          <section className="panel grow">
+            <div className="panel-head"><h2>Received</h2></div>
+            {received.error ? <ErrorNote error={received.error} onRetry={received.reload} /> : !received.data ? <Loading /> : (
+              <div className="scroll">
+                <table className="data stack">
+                  <thead><tr><th scope="col">Candidate</th><th scope="col" className="num">Amount</th><th scope="col">Paid on</th><th scope="col">Receipt</th></tr></thead>
+                  <tbody>
+                    {received.data.payments.map(p => (
+                      <tr key={p.id} className="click" tabIndex={0} onClick={() => nav(`/bde/leads/${p.lead.id}`)} onKeyDown={e => { if (e.key === 'Enter') nav(`/bde/leads/${p.lead.id}`); }}>
+                        <td className="who" data-label="Candidate"><b>{p.lead.name}</b><small>{p.lead.course}, {PAYMENT_LABEL[p.status].toLowerCase()}</small></td>
+                        <td className="num" data-label="Amount"><b>{rupee(p.amount)}</b></td>
+                        <td data-label="Paid on">{fmtDate(p.date)}</td>
+                        <td data-label="Receipt">{p.check && <Badge label={CHECK_LABEL[p.check]} />}{p.rejectReason && <small className="reject-why">{p.rejectReason}. Record it again with a new receipt.</small>}</td>
+                      </tr>
+                    ))}
+                    {!received.data.payments.length && <tr><td colSpan={4}><Empty title="No payments yet" /></td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+          <section className="panel side">
+            <div className="panel-head"><h2>Promised</h2></div>
             {promised.error ? <ErrorNote error={promised.error} onRetry={promised.reload} /> : !promised.data ? <Loading /> : promised.data.payments.map(p => (
               <Link className="list-row" key={p.id} to={`/bde/payments/new?lead=${p.lead.id}`}>
                 <span className="grow-1"><b>{p.lead.name}</b><span className="sub">{p.lead.course}</span></span>
@@ -30,23 +53,8 @@ export default function Payments() {
               </Link>
             ))}
             {promised.data && !promised.data.payments.length && <Empty title="No promised payments" />}
-          </div>
-        </section>
-        <section className="sec">
-          <div className="sec-head"><h2>Received</h2></div>
-          <div className="card-list">
-            {received.error ? <ErrorNote error={received.error} onRetry={received.reload} /> : !received.data ? <Loading /> : received.data.payments.map(p => (
-              <Link className="list-row" key={p.id} to={`/bde/leads/${p.lead.id}`}>
-                <span className="grow-1"><b>{p.lead.name}</b>
-                  <span className="sub" style={{ display: 'block' }}>{PAYMENT_LABEL[p.status]}, {fmtDate(p.date)}</span>
-                  {p.rejectReason && <span className="sub" style={{ display: 'block', color: 'var(--red)' }}>{p.rejectReason}</span>}
-                </span>
-                <span className="end"><b>{rupee(p.amount)}</b>{p.check && <Badge label={CHECK_LABEL[p.check]} />}</span>
-              </Link>
-            ))}
-            {received.data && !received.data.payments.length && <Empty title="No payments yet" />}
-          </div>
-        </section>
+          </section>
+        </div>
       </main>
     </>
   );
