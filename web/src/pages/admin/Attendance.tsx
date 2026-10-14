@@ -56,11 +56,15 @@ export default function Attendance() {
             </span>
           </div>
           {error ? <ErrorNote error={error} onRetry={reload} /> : !data ? <Loading /> : (
-            <div className="scroll">
+            // Its own scroll box, so the date row stays on top and names stay on the left while scrolling
+            <div className="scroll att-scroll">
               <table className="data att-grid">
                 <thead><tr>
                   <th scope="col" className="sticky">BDE</th>
-                  {data.dates.map(d => <th key={d} scope="col" className={`day${d === todayIST() ? ' today' : ''}`} title={fmtDate(d, true)}>{Number(d.slice(8))}</th>)}
+                  {data.dates.map(d => {
+                    const dow = new Date(`${d}T00:00:00Z`).getUTCDay();
+                    return <th key={d} scope="col" className={`day${d === todayIST() ? ' today' : ''}${dow === 0 ? ' sun' : ''}`} title={fmtDate(d, true)}>{Number(d.slice(8))}<small>{'SMTWTFS'[dow]}</small></th>;
+                  })}
                   <th scope="col" className="num">Present</th><th scope="col" className="num">Late</th><th scope="col" className="num">Leave</th><th scope="col" className="num">Absent</th>
                 </tr></thead>
                 <tbody>

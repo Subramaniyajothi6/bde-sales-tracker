@@ -218,3 +218,14 @@ svg.hash { width: 18px; height: 18px; }
 .day-btn:hover i.d, .day-btn:focus-visible i.d { box-shadow: 0 0 0 2px var(--primary); }
 .day-detail-status { display: flex; align-items: center; gap: 10px; font-size: 16px; }
 .day-detail-status i.d { width: 30px; height: 30px; font-size: 12px; }
+
+/* Attendance grid: the date row stays on top and the names stay on the left while scrolling */
+.att-scroll { max-height: calc(100dvh - 220px); min-height: 320px; overflow: auto; }
+table.att-grid thead th { position: sticky; top: 0; z-index: 2; background: #F8F9FB; box-shadow: 0 1px 0 var(--line); }
+table.att-grid thead th.sticky { z-index: 3; background: #F8F9FB; }
+table.att-grid th.day { line-height: 1.15; padding-top: 6px; padding-bottom: 6px; }
+table.att-grid th.day small { display: block; font-size: 10px; color: var(--faint); font-weight: 500; }
+table.att-grid th.day.sun { color: var(--faint); }
+table.att-grid th.day.today { color: var(--primary); font-weight: 700; }
+table.att-grid th.day.today small { color: var(--primary); }
+@media (max-width: 960px) { .att-scroll { max-height: calc(100dvh - 140px); } }
