@@ -220,7 +220,7 @@ svg.hash { width: 18px; height: 18px; }
 .day-detail-status i.d { width: 30px; height: 30px; font-size: 12px; }
 
 /* Attendance grid: the date row stays on top and the names stay on the left while scrolling */
-.att-scroll { max-height: calc(100dvh - 220px); min-height: 320px; overflow: auto; }
+.panel .att-scroll { max-height: calc(100dvh - 220px); min-height: 320px; overflow: auto; }
 table.att-grid thead th { position: sticky; top: 0; z-index: 2; background: #F8F9FB; box-shadow: 0 1px 0 var(--line); }
 table.att-grid thead th.sticky { z-index: 3; background: #F8F9FB; }
 table.att-grid th.day { line-height: 1.15; padding-top: 6px; padding-bottom: 6px; }
@@ -228,4 +228,39 @@ table.att-grid th.day small { display: block; font-size: 10px; color: var(--fain
 table.att-grid th.day.sun { color: var(--faint); }
 table.att-grid th.day.today { color: var(--primary); font-weight: 700; }
 table.att-grid th.day.today small { color: var(--primary); }
-@media (max-width: 960px) { .att-scroll { max-height: calc(100dvh - 140px); } }
+@media (max-width: 960px) { .panel .att-scroll { max-height: calc(100dvh - 140px); } }
+
+/* =========================================================
+   Every data table: headings stay on top, the first column (names)
+   stays on the left, and the Reports total row stays at the bottom.
+   Each table scrolls in its own box sized to the screen; short tables
+   are unchanged because they never fill the box.
+   ========================================================= */
+.panel .scroll { max-height: calc(100dvh - 120px); overflow: auto; }
+table.data thead th { position: sticky; top: 0; z-index: 2; background: #F8F9FB; box-shadow: 0 1px 0 var(--line); }
+.scroll table.data th:first-child, .scroll table.data td:first-child { position: sticky; left: 0; z-index: 1; background: var(--card); }
+.scroll table.data thead th:first-child { z-index: 3; background: #F8F9FB; }
+.scroll table.data tr.total td { position: sticky; bottom: 0; z-index: 1; background: #F8F9FB; box-shadow: 0 -1px 0 #CDD3DC; }
+.scroll table.data tr.total td:first-child { z-index: 2; }
+/* Row hover still shows on the fixed first cell */
+table.data tr.click:hover td:first-child { background: var(--hover); }
+/* A thin line marks the fixed name column once the table scrolls sideways */
+.scroll table.data td:first-child, .scroll table.data th:first-child { box-shadow: 1px 0 0 var(--line-2); }
+.scroll table.data thead th:first-child { box-shadow: 1px 0 0 var(--line-2), 0 1px 0 var(--line); }
+/* Tables inside a dialog (lead import preview) keep a smaller box */
+dialog .scroll { max-height: 260px; }
+
+/* Phone: BDE tables that become cards have no heading row, so no inner scroll box or fixed column */
+@media (max-width: 700px) {
+  .panel .scroll:has(> table.data.stack) { max-height: none; overflow: visible; }
+  table.data.stack td:first-child { position: static; box-shadow: none; }
+}
+/* Printing (Download PDF) shows the whole table, not a scroll box */
+@media print {
+  .panel .scroll { max-height: none; overflow: visible; }
+  table.data thead th, .scroll table.data td:first-child, .scroll table.data th:first-child, .scroll table.data tr.total td { position: static; box-shadow: none; }
+}
+
+/* Chat list: a tag (read-only, Admin) moves under the name when space is short, and never runs into the time */
+.person .grow-1 b { flex-wrap: wrap; row-gap: 2px; }
+.person .end { flex-shrink: 0; padding-left: 8px; }
