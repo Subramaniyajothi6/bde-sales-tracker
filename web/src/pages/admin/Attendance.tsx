@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, type DayCell, type Leave } from '../../api';
+import { api, type DayCell, type Leave, type UserRef } from '../../api';
 import { download, errorText, useLoad, useToast } from '../../lib/hooks';
 import { DAY_LABEL, LEAVE_STATUS_LABEL, LEAVE_TYPE_LABEL, fmtClock, fmtDate, fmtTime, monthName, todayIST } from '../../lib/format';
 import { Badge, Empty, ErrorNote, Loading, Modal, StatStrip } from '../../components/ui';
@@ -26,6 +26,7 @@ export default function Attendance() {
   const { data, error, reload } = useLoad(() => api.attendance.month(month), [month]);
   const leaves = useLoad(() => api.leaves.list());
   const t = data?.today;
+  const [picked, setPicked] = useState<{ bde: UserRef; cell: DayCell } | null>(null);
   const reloadAll = () => { void reload(); void leaves.reload(); window.dispatchEvent(new Event(LEAVES_CHANGED)); };
 
   return (
@@ -46,6 +47,7 @@ export default function Attendance() {
       </PageHead>
       <main className="wrap">
         <LeaveRequests list={leaves.data?.leaves ?? null} error={leaves.error} onChanged={reloadAll} />
+        <DayDetails picked={picked} leaves={leaves.data?.leaves ?? []} onClose={() => setPicked(null)} />
         <section className="panel">
           <div className="panel-head">
             <h2>Each BDE, day by day</h2>
@@ -65,7 +67,7 @@ export default function Attendance() {
                   {data.rows.map(r => (
                     <tr key={r.bde.id}>
                       <td className="who sticky"><Link to={`/admin/bde/${r.bde.id}`}><b>{r.bde.name}</b></Link></td>
-                      {r.cells.map(c => <td key={c.date} className="day" title={cellTitle(c)}><i className={`d d-${c.status.toLowerCase().replace('_', '-')}`}>{DAY_LABEL[c.status][1]}</i></td>)}
+                      {r.cells.map(c => <td key={c.date} className="day"><DayButton cell={c} onOpen={() => setPicked({ bde: r.bde, cell: c })} /></td>)}
                       <td className="num"><b>{r.totals.present}</b></td><td className="num">{r.totals.late}</td>
                       <td className="num">{r.totals.leave}</td><td className="num">{r.totals.absent || <span className="muted">0</span>}</td>
                     </tr>
@@ -75,10 +77,49 @@ export default function Attendance() {
               </table>
             </div>
           )}
-          <div className="panel-foot"><span>Hover over a day to see start and finish times. A day with calls but no "Start my day" tap still counts as present.</span></div>
+          <div className="panel-foot"><span>Tap a day (or press and hold) to see start and finish times. A day with calls but no "Start my day" tap still counts as present.</span></div>
         </section>
       </main>
     </>
+  );
+}
+
+/** One day square. Opens the details on a tap or click, or after pressing and holding for half a second. */
+function DayButton({ cell, onOpen }: { cell: DayCell; onOpen: () => void }) {
+  const timer = useRef<number>();
+  const held = useRef(false);
+  const stop = () => window.clearTimeout(timer.current);
+  return (
+    <button type="button" className="day-btn" title={cellTitle(cell)} aria-label={cellTitle(cell)}
+      onPointerDown={() => { held.current = false; stop(); timer.current = window.setTimeout(() => { held.current = true; onOpen(); }, 500); }}
+      onPointerUp={stop} onPointerLeave={stop} onPointerCancel={stop}
+      // On touch screens a long press arrives as the browser's own "context menu" signal
+      onContextMenu={e => { e.preventDefault(); stop(); held.current = true; onOpen(); }}
+      onClick={() => { stop(); if (!held.current) onOpen(); held.current = false; }}>
+      <i className={`d d-${cell.status.toLowerCase().replace('_', '-')}`}>{DAY_LABEL[cell.status][1]}</i>
+    </button>
+  );
+}
+
+/** Details of one BDE's day: status, start and finish, hours, and the leave if they were on leave. */
+function DayDetails({ picked, leaves, onClose }: { picked: { bde: UserRef; cell: DayCell } | null; leaves: Leave[]; onClose: () => void }) {
+  const c = picked?.cell;
+  const leave = c && leaves.find(l => l.user.id === picked!.bde.id && l.status === 'APPROVED' && l.from <= c.date && c.date <= l.to);
+  const rows: [string, React.ReactNode][] = c ? [
+    ['Started', c.punchIn ? fmtTime(c.punchIn) : '–'],
+    ['Finished', c.punchOut ? fmtTime(c.punchOut) : c.punchIn ? 'Report not sent yet' : '–'],
+    ['Hours', c.hours ? `${c.hours} h` : '–'],
+    ...(leave ? [['Leave', `${LEAVE_TYPE_LABEL[leave.type]}: ${leave.reason}`] as [string, React.ReactNode]] : [])
+  ] : [];
+  return (
+    <Modal open={!!picked} title={picked ? `${picked.bde.name}, ${fmtDate(picked.cell.date, true)}` : 'Day'} onClose={onClose}
+      footer={picked && <><Link className="btn ghost" to={`/admin/bde/${picked.bde.id}`}>Open {picked.bde.name.split(' ')[0]}'s page</Link><button type="button" className="btn" onClick={onClose}>Done</button></>}>
+      {c && <>
+        <div className="day-detail-status"><i className={`d d-${c.status.toLowerCase().replace('_', '-')}`}>{DAY_LABEL[c.status][1] || '–'}</i><b>{DAY_LABEL[c.status][0] || 'Upcoming day'}</b></div>
+        <dl className="facts">{rows.map(([k, v]) => <div key={k} style={{ display: 'contents' }}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+        {c.status === 'PRESENT' && !c.punchIn && <p className="small muted">Counted as present because calls were logged that day, without a "Start my day" tap.</p>}
+      </>}
+    </Modal>
   );
 }
 

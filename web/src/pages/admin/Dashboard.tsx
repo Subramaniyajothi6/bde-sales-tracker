@@ -15,7 +15,7 @@ export default function Dashboard() {
   const todo = ([
     [data.todo.receiptsToVerify, 'receipts to verify', '/admin/payments'],
     [data.todo.leavesToApprove, 'leave requests to answer', '/admin/attendance'],
-    [data.todo.notStarted, "BDEs haven't started calling", '/admin/daily-reports?show=not-started'],
+    [data.todo.notStarted, "BDEs haven't started calling", '/admin/report?show=not-started'],
     [data.todo.overdueFollowUps, 'follow-ups overdue', '/admin/leads?view=overdue'],
     [data.todo.interviewsToMark, 'interviews not marked', '/admin/interviews']
   ] as const).filter(([n]) => n > 0);
@@ -33,7 +33,7 @@ export default function Dashboard() {
       <main className="wrap">
         <div className="row">
           <section className="panel grow">
-            <div className="panel-head"><h2>Each BDE, this month</h2><Link className="btn ghost sm" to="/admin/reports">Full report</Link></div>
+            <div className="panel-head"><h2>Each BDE, this month</h2><Link className="btn ghost sm" to="/admin/report?period=month">Full report</Link></div>
             <SortTable
               rows={data.month.rows}
               rowKey={r => r.bde.id}

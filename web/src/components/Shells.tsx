@@ -4,6 +4,7 @@ import { api } from '../api';
 import { useAuth } from '../lib/auth';
 import { initials } from '../lib/format';
 import { useUnreadChat } from '../pages/Chat';
+import { Bell } from './Bell';
 import { LEAVES_CHANGED } from '../pages/admin/Attendance';
 
 const svg = (d: ReactNode) => (
@@ -76,10 +77,10 @@ function Shell({ role }: { role: 'admin' | 'bde' }) {
   const home = `/${role}`;
   // [path, label, icon, count shown as a pill, what the count means]
   const items: [string, string, ReactNode, number, string][] = role === 'admin' ? [
-    ['/admin', 'Dashboard', ICON.dashboard, 0, ''], ['/admin/daily-reports', 'Daily reports', ICON.daily, 0, ''],
+    ['/admin', 'Dashboard', ICON.dashboard, 0, ''], ['/admin/report', 'Reports', ICON.reports, 0, ''],
     ['/admin/attendance', 'Attendance', ICON.attendance, counts.leaves, 'leave requests waiting'], ['/admin/leads', 'Leads', ICON.leads, 0, ''],
     ['/admin/interviews', 'Interviews', ICON.interviews, 0, ''], ['/admin/payments', 'Payments', ICON.payments, counts.receipts, 'receipts to verify'],
-    ['/admin/reports', 'Monthly report', ICON.reports, 0, ''], ['/admin/chat', 'Chat', ICON.chat, unread, 'unread messages'],
+    ['/admin/chat', 'Chat', ICON.chat, unread, 'unread messages'],
     ['/admin/team', 'Team', ICON.team, 0, ''], ['/admin/activity', 'Activity', ICON.activity, 0, '']
   ] : [
     ['/bde', 'Today', ICON.reports, 0, ''], ['/bde/leads', 'My leads', ICON.leads, 0, ''],
@@ -94,6 +95,7 @@ function Shell({ role }: { role: 'admin' | 'bde' }) {
       <header className="topbar">
         <NavLink className="brand" to={home}>ADZ4NEEDZ</NavLink>
         <div className="topbar-end">
+          <Bell />
           <button type="button" className={`acct-btn${accountOpen ? ' on' : ''}`} aria-label="Your account" aria-expanded={accountOpen} aria-controls="account-box"
             onClick={() => { setMenuOpen(false); setAccountOpen(o => !o); }}>{initials(user?.name ?? '')}</button>
           {/* The same button opens and closes the pages menu, which drops down under this bar */}
@@ -117,6 +119,7 @@ function Shell({ role }: { role: 'admin' | 'bde' }) {
       <aside className={`sidebar${menuOpen ? ' open' : ''}`} id="main-menu">
         <div className="side-top">
           <NavLink className="brand" to={home}><span>ADZ4NEEDZ<small>BDE Sales Tracker</small></span></NavLink>
+          <Bell />
         </div>
         <nav aria-label="Main">
           {items.map(([to, label, icon, n, what]) => (

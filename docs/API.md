@@ -115,6 +115,12 @@ All return the **today** object:
 | `GET /stats/bde/:id?month=` | Admin, or the BDE for themselves | `{ month, bde, rank, teamSize, stats, teamAverage, days: [{ date, calls }] }` |
 | `GET /stats/attendance?month=` | Admin | `{ month, totals, lowest: [{ bde, scheduled, attended, rate }] }` |
 
+## Reports (any period)
+
+| Method and path | Who | Get back |
+|---|---|---|
+| `GET /reports?from=&to=` | Admin | `{ from, to, days, rows: [{ bde, report: { status, sentDays, dueDays, submittedAt, note }, counts, calls, target, interested, interviewsScheduled, interviewsAttended, interviewsMissed, committed, paid, revenue, daysOnTarget, daysWorked }], totals }`. Both the daily-report numbers and the monthly-report numbers for any period up to a year. `target` counts working days up to today, not counting approved leave. |
+
 ## Attendance
 
 `cell` = `{ date, status, punchIn, punchOut, hours }`. Late means punching in after `LATE_AFTER` (`.env`, default 10:00). A day with calls but no punch-in counts as present.
@@ -138,7 +144,7 @@ All return the **today** object:
 
 ## Chat
 
-One-to-one messages between any two active people (BDE to BDE, BDE to admin). The app asks for new messages every few seconds; no extra server is needed. Messages are private and never appear in the activity log.
+Channels for the whole team (below), and one-to-one messages between any two active people (BDE to BDE, BDE to admin). The app asks for new messages every few seconds; no extra server is needed. Messages are private and never appear in the activity log.
 
 | Method and path | Who | Send | Get back |
 |---|---|---|---|
@@ -146,6 +152,28 @@ One-to-one messages between any two active people (BDE to BDE, BDE to admin). Th
 | `GET /chat/contacts` | Any | | `{ contacts: [{ user: { id, employeeId, name, role }, last: { text, at, mine } | null, unread }] }`, latest conversation first |
 | `GET /chat/:userId?after=<messageId>` | Any | | `{ with, messages: [{ id, from, text, at, readAt }], seenUpTo }`. Last 200, or only newer than `after`. Marks their messages to you as read. `seenUpTo` = your newest message they have read. |
 | `POST /chat/:userId` | Any | `{ text }` (1 to 1000 characters) | `{ message }`. **409** if their account is deactivated. |
+
+### Channels
+
+Three channels made by migration 0003: `general` and `team` (everyone posts), `announcements` (only admins post; each post also notifies everyone).
+
+| Method and path | Who | Send | Get back |
+|---|---|---|---|
+| `GET /chat/channels` | Any | | `{ channels: [{ key, name, description, adminOnlyPost, canPost, unread, last }] }` |
+| `GET /chat/channels/:key?after=<messageId>` | Any | | `{ channel, messages: [{ id, from: { id, employeeId, name, role }, text, at }] }`. Opening it marks the channel as read. |
+| `POST /chat/channels/:key` | Any (admins only in announcements) | `{ text }` | `{ message }`. **403** for a BDE in announcements. |
+
+`GET /chat/unread` counts private and channel messages together.
+
+## Notifications (the bell)
+
+Made by the server when: a leave is asked for (to admins) or answered (to the BDE), a receipt is recorded (to admins) or checked (to the BDE), leads are imported, added or moved to a BDE, a report is sent with a note (to admins), or an announcement is posted (to everyone).
+
+| Method and path | Who | Send | Get back |
+|---|---|---|---|
+| `GET /notifications/unread` | Any | | `{ count }` |
+| `GET /notifications` | Any | | `{ items: [{ id, kind, title, link, at, read }], unread }`, latest 30 |
+| `POST /notifications/read` | Any | `{ ids? }` (none = all) | `{ ok }` |
 
 ## Activity log
 
@@ -155,6 +183,6 @@ One-to-one messages between any two active people (BDE to BDE, BDE to admin). Th
 
 ## Excel downloads (Admin)
 
-`GET /exports/attendance.xlsx?month=`, `GET /exports/daily.xlsx?from=&to=` (one day includes the BDEs' notes), `GET /exports/monthly.xlsx?month=`, `GET /exports/leads.xlsx`, `GET /exports/payments.xlsx`
+`GET /exports/report.xlsx?from=&to=` (everything on the Reports page), `GET /exports/attendance.xlsx?month=`, `GET /exports/daily.xlsx?from=&to=` (one day includes the BDEs' notes), `GET /exports/monthly.xlsx?month=`, `GET /exports/leads.xlsx`, `GET /exports/payments.xlsx`
 
 PDF: the web app opens a print-friendly page and uses the browser's "Save as PDF".

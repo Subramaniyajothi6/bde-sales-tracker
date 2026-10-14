@@ -81,19 +81,22 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  leads         Lead[]        @relation("LeadOwner")
-  notes         LeadNote[]
-  calls         CallLog[]
-  reports       DailyReport[]
-  interviews    Interview[]   @relation("InterviewCreator")
-  payments      Payment[]     @relation("PaymentRecorder")
-  verified      Payment[]     @relation("PaymentVerifier")
-  attendance    Attendance[]
-  leaves        Leave[]       @relation("LeaveOwner")
-  leavesDecided Leave[]       @relation("LeaveDecider")
-  activity      Activity[]
-  sent          Message[]     @relation("MessageSender")
-  received      Message[]     @relation("MessageRecipient")
+  leads           Lead[]           @relation("LeadOwner")
+  notes           LeadNote[]
+  calls           CallLog[]
+  reports         DailyReport[]
+  interviews      Interview[]      @relation("InterviewCreator")
+  payments        Payment[]        @relation("PaymentRecorder")
+  verified        Payment[]        @relation("PaymentVerifier")
+  attendance      Attendance[]
+  leaves          Leave[]          @relation("LeaveOwner")
+  leavesDecided   Leave[]          @relation("LeaveDecider")
+  activity        Activity[]
+  sent            Message[]        @relation("MessageSender")
+  received        Message[]        @relation("MessageRecipient")
+  channelMessages ChannelMessage[]
+  channelReads    ChannelRead[]
+  notifications   Notification[]
 }
 
 model Course {
@@ -302,4 +305,62 @@ model Message {
 
   @@index([senderId, recipientId, id])
   @@index([recipientId, readAt])
+}
+
+/// A group chat room. Created by the migration: general, team, announcements.
+model Channel {
+  id            Int      @id @default(autoincrement())
+  /// Short name used in addresses, e.g. "general"
+  key           String   @unique @db.VarChar(40)
+  name          String   @db.VarChar(60)
+  description   String   @db.VarChar(200)
+  /// Only admins can post (announcements); everyone can read
+  adminOnlyPost Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  messages ChannelMessage[]
+  reads    ChannelRead[]
+}
+
+model ChannelMessage {
+  id        Int      @id @default(autoincrement())
+  channelId Int
+  senderId  Int
+  text      String   @db.VarChar(1000)
+  createdAt DateTime @default(now())
+
+  channel Channel @relation(fields: [channelId], references: [id])
+  sender  User    @relation(fields: [senderId], references: [id])
+
+  @@index([channelId, id])
+}
+
+/// The newest channel message a person has seen, for unread counts.
+model ChannelRead {
+  userId     Int
+  channelId  Int
+  lastReadId Int @default(0)
+
+  user    User    @relation(fields: [userId], references: [id])
+  channel Channel @relation(fields: [channelId], references: [id])
+
+  @@id([userId, channelId])
+}
+
+/// One item under the bell, e.g. "Your leave for 20 Oct was approved".
+model Notification {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  /// Short code, e.g. LEAVE_ANSWERED (see lib/notify.ts)
+  kind      String    @db.VarChar(30)
+  title     String    @db.VarChar(200)
+  /// Page to open when clicked, e.g. /bde/me
+  link      String?   @db.VarChar(200)
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, id])
+  @@index([userId, readAt])
 }

@@ -7,6 +7,7 @@ import { isAdmin, me, requireAdmin, requireBde } from '../lib/auth.js';
 import { addDays, dateOnly, humanDate, todayIST, workDays, ymd } from '../lib/time.js';
 import { userRef } from '../lib/present.js';
 import { logActivity } from '../lib/activity.js';
+import { notify } from '../lib/notify.js';
 
 /** Leave requests: a BDE asks, the admin approves or rejects. */
 export const leaves = Router();
@@ -74,6 +75,7 @@ leaves.post('/', requireBde, async (req, res) => {
     include: { user: true, decidedBy: true }
   });
   logActivity(userId, 'LEAVE_REQUESTED', `${TYPE_LABEL[b.type]} leave, ${span(leave)}`);
+  notify('admins', 'LEAVE_REQUESTED', `${leave.user.name} asked for ${TYPE_LABEL[b.type].toLowerCase()} leave, ${span(leave)}`, '/admin/attendance');
   res.status(201).json({ leave: out(leave) });
 });
 
@@ -104,6 +106,7 @@ leaves.post('/:id/approve', requireAdmin, async (req, res) => {
   const { note } = z.object({ note: z.string().trim().max(200).optional() }).parse(req.body ?? {});
   const l = await decide(Number(req.params.id), me(req).id, 'APPROVED', note);
   logActivity(me(req).id, 'LEAVE_APPROVED', `${l.user.name}, ${span(l)}`);
+  notify([l.userId], 'LEAVE_ANSWERED', `Your leave for ${span(l)} was approved`, '/bde/me');
   res.json({ leave: out(l) });
 });
 
@@ -111,5 +114,6 @@ leaves.post('/:id/reject', requireAdmin, async (req, res) => {
   const { note } = z.object({ note: z.string().trim().min(3, 'Say why the leave is rejected').max(200) }).parse(req.body ?? {});
   const l = await decide(Number(req.params.id), me(req).id, 'REJECTED', note);
   logActivity(me(req).id, 'LEAVE_REJECTED', `${l.user.name}, ${span(l)}: ${note}`);
+  notify([l.userId], 'LEAVE_ANSWERED', `Your leave for ${span(l)} was not approved: ${note}`, '/bde/me');
   res.json({ leave: out(l) });
 });

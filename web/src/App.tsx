@@ -6,11 +6,9 @@ import { AdminShell, BdeShell } from './components/Shells';
 import Login, { homeFor } from './pages/Login';
 import ChangePassword from './pages/ChangePassword';
 import Dashboard from './pages/admin/Dashboard';
-import DailyReports from './pages/admin/DailyReports';
 import AdminLeads from './pages/admin/Leads';
 import AdminInterviews from './pages/admin/Interviews';
 import AdminPayments from './pages/admin/Payments';
-import Reports from './pages/admin/Reports';
 import Team from './pages/admin/Team';
 import BdeDetail from './pages/admin/BdeDetail';
 import Today from './pages/bde/Today';
@@ -22,6 +20,7 @@ import RecordPayment from './pages/bde/RecordPayment';
 import Month from './pages/bde/Month';
 import Profile from './pages/bde/Profile';
 import Attendance from './pages/admin/Attendance';
+import Report from './pages/admin/Report';
 import Activity from './pages/admin/Activity';
 import ChatPage from './pages/Chat';
 
@@ -65,17 +64,20 @@ export default function App() {
 
       <Route path="/admin" element={<Only role="ADMIN"><AdminShell /></Only>}>
         <Route index element={<Dashboard />} />
-        <Route path="daily-reports" element={<DailyReports />} />
+        {/* Old addresses of the Daily reports and Monthly report pages, now one Reports page */}
+        <Route path="daily-reports" element={<Navigate to="/admin/report" replace />} />
         <Route path="leads" element={<AdminLeads />} />
         <Route path="interviews" element={<AdminInterviews />} />
         <Route path="payments" element={<AdminPayments />} />
-        <Route path="reports" element={<Reports />} />
+        <Route path="reports" element={<Navigate to="/admin/report" replace />} />
         <Route path="team" element={<Team />} />
         <Route path="bde/:id" element={<BdeDetail />} />
+        <Route path="report" element={<Report />} />
         <Route path="attendance" element={<Attendance />} />
         <Route path="activity" element={<Activity />} />
         <Route path="chat" element={<ChatPage role="admin" />} />
         <Route path="chat/:id" element={<ChatPage role="admin" />} />
+        <Route path="chat/c/:key" element={<ChatPage role="admin" />} />
       </Route>
 
       <Route path="/bde" element={<Only role="BDE"><BdeShell /></Only>}>
@@ -89,6 +91,7 @@ export default function App() {
         <Route path="me/profile" element={<Profile />} />
         <Route path="chat" element={<ChatPage role="bde" />} />
         <Route path="chat/:id" element={<ChatPage role="bde" />} />
+        <Route path="chat/c/:key" element={<ChatPage role="bde" />} />
       </Route>
 
       <Route path="*" element={<Home />} />

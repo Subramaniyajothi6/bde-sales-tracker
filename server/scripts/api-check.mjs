@@ -210,17 +210,22 @@ ok(r.status === 200 && r.type.includes('spreadsheet'), 'attendance Excel', r.sta
 
 console.log('Leave');
 // A free weekday 30 to 89 days ahead, so reruns don't clash with earlier requests
-const leaveDay = (offset) => { const d = new Date(Date.now() + (offset + Math.floor(Math.random() * 60)) * 864e5); if (d.getUTCDay() === 0) d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
+const leaveDay = (offset) => { const d = new Date(Date.now() + (offset + Math.floor(Math.random() * 85)) * 864e5); if (d.getUTCDay() === 0) d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
 const l1 = leaveDay(30);
 r = await bde('POST', '/leaves', { type: 'SICK', from: l1, to: l1, reason: 'x' });
 ok(r.status === 400, 'leave without a proper reason -> 400');
 r = await bde('POST', '/leaves', { type: 'CASUAL', from: l1, to: '2020-01-01', reason: 'Backwards dates' });
 ok(r.status === 400, 'last day before first day -> 400');
-r = await bde('POST', '/leaves', { type: 'SICK', from: l1, to: l1, reason: 'API check leave' });
+// Earlier runs leave requests behind, so try free days until one is accepted
+for (let i = 0, d = l1; i < 20; i++, d = leaveDay(30)) {
+  r = await bde('POST', '/leaves', { type: 'SICK', from: d, to: d, reason: 'API check leave' });
+  if (r.status === 201) break;
+}
 ok(r.status === 201 && r.data.leave.status === 'PENDING', 'BDE asks for leave', r.data);
 const leaveId = r.data.leave?.id;
-ok((await bde('POST', '/leaves', { type: 'SICK', from: l1, to: l1, reason: 'Same day again' })).status === 409, 'overlapping request -> 409');
+ok((await bde('POST', '/leaves', { type: 'SICK', from: r.data.leave?.from, to: r.data.leave?.from, reason: 'Same day again' })).status === 409, 'overlapping request -> 409');
 ok((await bde('POST', `/leaves/${leaveId}/approve`)).status === 403, 'BDE cannot approve leave');
+ok((await admin('POST', '/leaves/abc/approve')).status === 404, 'malformed id -> 404, not a server error');
 r = await admin('GET', '/stats/dashboard');
 ok(r.data.todo.leavesToApprove >= 1, 'dashboard counts leave to answer');
 ok((await admin('POST', `/leaves/${leaveId}/reject`, {})).status === 400, 'reject needs a reason');
@@ -280,7 +285,8 @@ console.log('Activity log');
 ok((await bde('GET', '/activity')).status === 403, 'BDE cannot read the activity log');
 r = await admin('GET', `/activity?userId=${karthikId}`);
 const acts = r.data.items?.map(i => i.action) ?? [];
-ok(['PUNCH_IN', 'REPORT_SENT', 'LEAVE_REQUESTED'].every(a => acts.includes(a)), 'log has punch in, report and leave', acts.slice(0, 10));
+ok(['REPORT_SENT', 'LEAVE_REQUESTED'].every(a => acts.includes(a)), 'log has report and leave', acts.slice(0, 10));
+ok((await admin('GET', `/activity?userId=${karthikId}&action=PUNCH_IN`)).data.items.length >= 1, 'log has the punch in (filter by kind)');
 ok(!r.data.items.some(i => i.detail.includes(word)), 'chat text is not in the log');
 
 console.log('Logout');

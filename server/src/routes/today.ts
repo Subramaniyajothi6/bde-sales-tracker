@@ -7,6 +7,7 @@ import { dateOnly, istInstantRange, todayIST } from '../lib/time.js';
 import { env } from '../lib/env.js';
 import { punchIn } from '../lib/attendance.js';
 import { logActivity } from '../lib/activity.js';
+import { notify } from '../lib/notify.js';
 
 /**
  * A BDE's working day: log calls, undo a wrong tap, send the report.
@@ -99,6 +100,7 @@ today.post('/submit', async (req, res) => {
   await db.attendance.update({ where: { userId_workDate: { userId: bdeId, workDate } }, data: { punchOut: now } });
   const total = await db.callLog.count({ where: { bdeId, workDate } });
   logActivity(bdeId, 'REPORT_SENT', `${total} calls${note ? `. Note: ${note}` : ''}`);
+  if (note) notify('admins', 'REPORT_NOTE', `${me(req).name}: ${note}`, '/admin/report');
   res.json(await todayPayload(req));
 });
 

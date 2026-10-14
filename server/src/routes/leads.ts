@@ -8,6 +8,7 @@ import { normalizePhone, formatPhone } from '../lib/phone.js';
 import { dateOnly, todayIST, ymd } from '../lib/time.js';
 import { userRef } from '../lib/present.js';
 import { logActivity } from '../lib/activity.js';
+import { notify } from '../lib/notify.js';
 
 export const leads = Router();
 
@@ -149,6 +150,7 @@ leads.post('/', async (req, res) => {
     },
     include: { course: true, owner: true }
   });
+  if (isAdmin(req)) notify([lead.ownerId], 'LEADS_GIVEN', `New lead for you: ${lead.name}`, `/bde/leads/${lead.id}`);
   logActivity(me(req).id, 'LEAD_ADDED', `${lead.name}, ${lead.course.name}${isAdmin(req) ? ` for ${lead.owner.name}` : ''}`);
   res.status(201).json({ lead: leadOut(lead) });
 });
@@ -214,6 +216,7 @@ leads.patch('/:id', async (req, res) => {
     data.ownerId = owner.id;
     notes.push(`Moved from ${lead.owner.name} to ${owner.name}`);
     logActivity(me(req).id, 'LEAD_MOVED', `${lead.name}: ${lead.owner.name} to ${owner.name}`);
+    notify([owner.id], 'LEADS_GIVEN', `${lead.name} was moved to you`, `/bde/leads/${lead.id}`);
   }
 
   const updated = await db.lead.update({

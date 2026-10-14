@@ -9,6 +9,7 @@ import { me, requireAdmin } from '../lib/auth.js';
 import { normalizePhone, formatPhone } from '../lib/phone.js';
 import { dateOnly, todayIST } from '../lib/time.js';
 import { logActivity } from '../lib/activity.js';
+import { notify } from '../lib/notify.js';
 
 /**
  * Import a sheet of candidates (.xlsx or .csv) as leads for one BDE. Admin only.
@@ -143,6 +144,7 @@ leadImport.post('/', upload.single('file'), async (req, res) => {
     const made = await db.lead.findMany({ where: { phone: { in: ready.map(p => p.phone!) }, ownerId: owner.id, stage: 'NEW' }, select: { id: true } });
     await db.leadNote.createMany({ data: made.map(l => ({ leadId: l.id, authorId: me(req).id, text: `Imported from ${req.file!.originalname.slice(0, 120)}` })) });
     logActivity(me(req).id, 'LEADS_IMPORTED', `${created} leads from ${req.file.originalname} for ${owner.name}`);
+    if (created) notify([owner.id], 'LEADS_GIVEN', `${created} new lead${created === 1 ? '' : 's'} added to your Call today list`, '/bde/leads?view=due');
   }
 
   res.json({

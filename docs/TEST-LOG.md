@@ -101,3 +101,21 @@ Below 960px the top bar has the logo on the left and two buttons on the right. Y
 | Production build (`npm run build`) | OK |
 
 The API check script now works on any day. Two checks had assumed the sample data had calls "today".
+
+## One Reports page, 14 Oct 2026
+
+Daily reports and Monthly report are replaced by one **Reports** page: Day, Week, Month or Custom period, calls and report status together with interviews, commitments, payments and revenue, plus Excel and PDF. The old addresses (`/admin/daily-reports`, `/admin/reports`) now open Reports. The dashboard's "Full report" opens it on the month, and "BDEs haven't started calling" opens it filtered to "No calls yet". The "Other downloads" box is gone: its four files are on Reports (day and week) and on the Leads and Payments pages.
+
+Checked: Reports page test 11/11, dashboard links 3/3, click-through 30/30, feature test all pass, no sideways scroll at 1024 and 390px.
+
+## Chat channels and the bell, 14 Oct 2026
+
+Chat now works like the company workspace: **#general**, **#team** and **announcements** (read-only for BDEs) on top, private chats below with "Search people". Channel messages show picture, name and time, grouped when one person sends several in a row. A **bell** (top of the sidebar on a laptop, top bar on a phone) shows notifications for leave, receipts, leads given to a BDE, report notes and announcements. Database: migration `0003_channels_notifications` (creates the three channels).
+
+| Check | Result |
+|---|---|
+| Channels and bell browser test (posting, read-only announcements, live updates, bell items open the right page, mark all read, phone) | 18/18 |
+| Click-through, feature test | 30/30, all pass |
+| API checks | 105/109 (the same 4 BDE-001 password checks) |
+
+Found while testing: a malformed id in an address (e.g. `/leaves/abc/approve`) gave a 500 server error. It now answers 404 "Item not found". Added an API check for it.

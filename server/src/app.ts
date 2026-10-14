@@ -21,6 +21,8 @@ import { leaves } from './routes/leaves.js';
 import { chat } from './routes/chat.js';
 import { activity } from './routes/activity.js';
 import { leadImport } from './routes/leadImport.js';
+import { reports } from './routes/reports.js';
+import { notifications } from './routes/notifications.js';
 
 export function createApp() {
   const app = express();
@@ -75,6 +77,8 @@ export function createApp() {
   app.use('/api/leaves', leaves);
   app.use('/api/chat', chat);
   app.use('/api/activity', activity);
+  app.use('/api/reports', reports);
+  app.use('/api/notifications', notifications);
   app.use('/api', () => { throw new HttpError(404, 'No such API endpoint'); });
 
   // In production the built web app is served from here too: one server, one address

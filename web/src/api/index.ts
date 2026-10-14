@@ -110,7 +110,27 @@ export interface ChatContact { user: UserRef & { role: Role }; last: { text: str
 export interface ChatMessage { id: number; from: number; text: string; at: string; readAt: string | null }
 export interface ChatThread { with: UserRef & { role: Role; active: boolean }; messages: ChatMessage[]; seenUpTo: number | null }
 
+export interface Channel {
+  key: string; name: string; description: string; adminOnlyPost: boolean; canPost: boolean; unread: number;
+  last: { text: string; at: string; from: string } | null;
+}
+export interface ChannelMessage { id: number; from: UserRef & { role: Role }; text: string; at: string }
+export interface ChannelThread { channel: Omit<Channel, 'unread' | 'last'>; messages: ChannelMessage[] }
+export interface Notice { id: number; kind: string; title: string; link: string | null; at: string; read: boolean }
+
 export interface ActivityItem { id: number; at: string; action: string; detail: string; user: UserRef & { role: Role } }
+
+export interface ReportRow {
+  bde: UserRef;
+  report: { status: ReportStatus; sentDays: number; dueDays: number; submittedAt: string | null; note: string | null };
+  counts: Counts; calls: number; target: number; interested: number;
+  interviewsScheduled: number; interviewsAttended: number; interviewsMissed: number;
+  committed: number; paid: number; revenue: number; daysOnTarget: number; daysWorked: number;
+}
+export interface Report {
+  from: string; to: string; days: number; rows: ReportRow[];
+  totals: { calls: number; target: number; interested: number; interviewsAttended: number; committed: number; paid: number; revenue: number; reportsSent: number };
+}
 
 export interface ImportResult {
   file: string; owner: { id: number; name: string }; columns: { name: boolean; course: boolean };
@@ -186,6 +206,9 @@ export const api = {
     bde: (id: number, month?: string) => get<BdeMonth>(`/stats/bde/${id}`, { month }),
     attendance: (month?: string) => get<{ month: string; totals: Stats; lowest: { bde: UserRef; scheduled: number; attended: number; rate: number }[] }>('/stats/attendance', { month })
   },
+  reports: {
+    get: (from: string, to: string) => get<Report>('/reports', { from, to })
+  },
   attendance: {
     month: (month?: string) => get<AttendanceMonth>('/attendance', { month }),
     mine: (month?: string) => get<{ month: string; lateAfter: string } & AttendanceRow>('/attendance/me', { month })
@@ -201,13 +224,22 @@ export const api = {
     unread: () => get<{ count: number }>('/chat/unread'),
     contacts: () => get<{ contacts: ChatContact[] }>('/chat/contacts'),
     thread: (userId: number, after?: number) => get<ChatThread>(`/chat/${userId}`, { after }),
-    send: (userId: number, text: string) => post<{ message: ChatMessage }>(`/chat/${userId}`, { text })
+    send: (userId: number, text: string) => post<{ message: ChatMessage }>(`/chat/${userId}`, { text }),
+    channels: () => get<{ channels: Channel[] }>('/chat/channels'),
+    channel: (key: string, after?: number) => get<ChannelThread>(`/chat/channels/${key}`, { after }),
+    post: (key: string, text: string) => post<{ message: ChannelMessage }>(`/chat/channels/${key}`, { text })
+  },
+  notifications: {
+    unread: () => get<{ count: number }>('/notifications/unread'),
+    list: () => get<{ items: Notice[]; unread: number }>('/notifications'),
+    read: (ids?: number[]) => post<{ ok: true }>('/notifications/read', ids ? { ids } : {})
   },
   activity: {
     list: (q: { userId?: number; action?: string; date?: string; before?: number } = {}) => get<{ items: ActivityItem[]; nextBefore: number | null }>('/activity', q)
   },
   exports: {
     attendance: (month?: string) => fileUrl('/exports/attendance.xlsx', { month }),
+    report: (from: string, to: string) => fileUrl('/exports/report.xlsx', { from, to }),
     daily: (from: string, to?: string) => fileUrl('/exports/daily.xlsx', { from, to }),
     monthly: (month?: string) => fileUrl('/exports/monthly.xlsx', { month }),
     leads: () => fileUrl('/exports/leads.xlsx'),

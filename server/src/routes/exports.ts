@@ -9,6 +9,7 @@ import { statsByBde } from '../lib/stats.js';
 import { dailyReportRows } from './dailyReports.js';
 import { STAGE_LABEL } from './leads.js';
 import { attendanceMonth } from './attendance.js';
+import { reportRows } from './reports.js';
 import type { DayStatus } from '../lib/attendance.js';
 
 /** Excel downloads (.xlsx). Admin only. */
@@ -196,6 +197,41 @@ exportsRouter.get('/daily.xlsx', async (req, res) => {
         tone: r => (r.total >= r.target ? 'green' : r.total < r.target * 0.6 ? 'amber' : null) },
       // The BDE's note only exists for a single day
       ...(from === to ? [{ header: 'Note from BDE', value: (r: R) => r.note ?? '', width: 45 }] : [])
+    ]
+  });
+});
+
+// ---------- Combined report (any period) ----------
+
+exportsRouter.get('/report.xlsx', async (req, res) => {
+  const today = todayIST();
+  const { from = today, to = from } = z.object({ from: dateStr.optional(), to: dateStr.optional() }).parse(req.query);
+  const data = await reportRows(from, to);
+  type R = (typeof data.rows)[number];
+  const oneDay = from === to;
+  await sendSheet<R>(res, {
+    filename: `report-${from}${oneDay ? '' : `-to-${to}`}.xlsx`,
+    title: 'BDE report',
+    subtitle: `${periodText(from, to)}. ${data.rows.length} BDEs. Revenue counts verified payments only.`,
+    rows: [...data.rows].sort((a, b) => b.revenue - a.revenue || b.calls - a.calls),
+    freezeCols: 2,
+    cols: [
+      { header: 'Employee ID', value: r => r.bde.employeeId, width: 13 },
+      { header: 'BDE', value: r => r.bde.name, width: 20 },
+      oneDay
+        ? { header: 'Report', value: r => REPORT[r.report.status][0], type: 'center', width: 13, tone: r => REPORT[r.report.status][1] }
+        : { header: 'Reports sent', value: r => `${r.report.sentDays} of ${r.report.dueDays}`, type: 'center', width: 13, tone: r => (r.report.sentDays < r.report.dueDays ? 'red' : 'green') },
+      { header: 'Calls', value: r => r.calls, type: 'int', total: true },
+      { header: 'Target', value: r => r.target, type: 'int', total: true },
+      { header: 'Interested', value: r => r.counts.INTERESTED, type: 'int', total: true },
+      { header: 'Call back later', value: r => r.counts.CALL_BACK, type: 'int', total: true },
+      { header: 'Not interested', value: r => r.counts.NOT_INTERESTED, type: 'int', total: true },
+      { header: 'No answer', value: r => r.counts.NO_ANSWER, type: 'int', total: true },
+      { header: 'Interviews attended', value: r => r.interviewsAttended, type: 'int', total: true },
+      { header: 'Payment commitments', value: r => r.committed, type: 'int', total: true },
+      { header: 'Successful payments', value: r => r.paid, type: 'int', total: true },
+      { header: 'Revenue', value: r => r.revenue, type: 'money', total: true, width: 15 },
+      ...(oneDay ? [{ header: 'Note from BDE', value: (r: R) => r.report.note ?? '', width: 40 }] : [])
     ]
   });
 });

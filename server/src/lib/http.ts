@@ -27,6 +27,11 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     res.status(404).json({ error: 'Item not found' });
     return;
   }
+  // A malformed id in the address (e.g. /leaves/abc) reaches the database as NaN
+  if (err instanceof Prisma.PrismaClientValidationError) {
+    res.status(404).json({ error: 'Item not found' });
+    return;
+  }
   if (err?.type === 'entity.parse.failed') {
     res.status(400).json({ error: 'The request body is not valid JSON' });
     return;

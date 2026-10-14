@@ -9,6 +9,7 @@ import { storage } from '../lib/storage.js';
 import { dateOnly, humanDate, monthRange, todayIST, ymd } from '../lib/time.js';
 import { formatPhone } from '../lib/phone.js';
 import { logActivity } from '../lib/activity.js';
+import { notify } from '../lib/notify.js';
 import { userRef } from '../lib/present.js';
 import { balanceOf, leadFor } from './leads.js';
 
@@ -133,6 +134,7 @@ payments.post('/', upload.single('receipt'), async (req, res) => {
     });
     return p;
   });
+  if (b.status !== 'PROMISED') notify('admins', 'RECEIPT_TO_VERIFY', `${me(req).name} recorded ${amountText} from ${lead.name}. Check the receipt.`, '/admin/payments');
   logActivity(actor, 'PAYMENT_RECORDED', `${lead.name}: ${b.status === 'PROMISED' ? `promised ${amountText} by ${humanDate(b.date)}` : `received ${amountText}`}`);
   res.status(201).json({ payment: out(created) });
 });
@@ -171,6 +173,7 @@ payments.post('/:id/verify', requireAdmin, async (req, res) => {
     return u;
   });
   logActivity(me(req).id, 'RECEIPT_VERIFIED', `${p.lead.name}, ₹${p.amount.toLocaleString('en-IN')}`);
+  notify([p.lead.ownerId], 'RECEIPT_CHECKED', `Receipt verified: ₹${p.amount.toLocaleString('en-IN')} from ${p.lead.name}`, `/bde/leads/${p.leadId}`);
   res.json({ payment: out(updated) });
 });
 
@@ -190,5 +193,6 @@ payments.post('/:id/reject', requireAdmin, async (req, res) => {
     })
   ]);
   logActivity(me(req).id, 'RECEIPT_REJECTED', `${updated.lead.name}, ₹${p.amount.toLocaleString('en-IN')}: ${reason}`);
+  notify([updated.lead.ownerId], 'RECEIPT_CHECKED', `Receipt rejected: ₹${p.amount.toLocaleString('en-IN')} from ${updated.lead.name}. ${reason}`, `/bde/leads/${p.leadId}`);
   res.json({ payment: out(updated) });
 });
