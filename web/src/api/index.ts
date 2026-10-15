@@ -26,7 +26,9 @@ export type Counts = Record<Outcome, number>;
 
 export interface Today {
   date: string; target: number; cutoff: string; counts: Counts; total: number;
-  recent: { id: number; outcome: Outcome; calledAt: string }[];
+  recent: { id: number; outcome: Outcome; calledAt: string; lead: { id: number; name: string } | null }[];
+  /** Today's calls and Excel changes, newest first. A call has an outcome; an Excel entry has the lines it changed. */
+  history: { kind: 'CALL' | 'SHEET'; id: number; at: string; outcome: Outcome | null; lead: { id: number; name: string } | null; lines: string[] }[];
   submittedAt: string | null;
   /** The note sent with today's report */
   note: string | null;
@@ -43,13 +45,13 @@ export interface Lead {
 export interface LeadDetail {
   lead: Lead;
   money: { fee: number; paid: number; balance: number };
-  notes: { id: number; text: string; author: string; createdAt: string }[];
+  notes: { id: number; text: string; author: string; source: NoteSource; createdAt: string }[];
   interviews: { id: number; scheduledAt: string; status: InterviewStatus; result: InterviewResult | null }[];
   payments: { id: number; amount: number; status: PaymentStatus; date: string; check: ReceiptCheck | null; closedAt: string | null }[];
 }
 export interface LeadList {
   leads: Lead[];
-  counts: { byStage: Record<Stage, number>; overdue: number; due: number; active: number };
+  counts: { byStage: Record<Stage, number>; overdue: number; due: number; active: number; all: number };
 }
 
 export interface Interview {
@@ -132,11 +134,33 @@ export interface Report {
   totals: { calls: number; target: number; interested: number; interviewsAttended: number; committed: number; paid: number; revenue: number; reportsSent: number };
 }
 
+export type ImportAssign = 'one' | 'share' | 'available';
 export interface ImportResult {
-  file: string; owner: { id: number; name: string }; columns: { name: boolean; course: boolean };
-  rows: number; ready: number; created: number; skippedCount: number;
-  preview: { row: number; name: string; phone: string; course: string }[];
+  file: string; owner: { id: number; name: string }; columns: { name: boolean; course: boolean; bde: boolean };
+  perOwner: { id: number; name: string; count: number }[];
+  rows: number; ready: number; created: number; skippedCount: number; batchId: number | null;
+  preview: { row: number; name: string; phone: string; course: string; bde: string }[];
   skipped: { row: number; name: string; phone: string; reason: string }[];
+}
+export type StageCounts = Record<Stage, number>;
+export interface ImportBatch {
+  id: number; fileName: string; createdAt: string; createdBy: string; count: number; called: number;
+  stages: StageCounts; byBde: { bde: UserRef; stages: StageCounts }[];
+}
+/** Where a lead history line came from */
+export type NoteSource = 'PAGE' | 'CALL' | 'SHEET' | 'IMPORT';
+
+export interface SheetResult {
+  file: string; rows: number; changed: number; unchanged: number; problems: number; applied: number;
+  /** New students (rows with no Lead ID) among the changes */
+  added: number;
+  items: { row: number; leadId: number | null; name: string; changes: string[]; errors: string[] }[];
+}
+export type TodayAttendance = 'PRESENT' | 'LATE' | 'LEAVE' | 'OFF' | 'NOT_IN';
+export interface BoardRow {
+  bde: UserRef; today: TodayAttendance; callsToday: number;
+  load: { open: number; due: number; overdue: number; notCalled: number };
+  month: { callsPerDay: number; interestedRate: number; interviewsAttended: number; showRate: number | null; paid: number; revenue: number; daysOnTarget: number; daysWorked: number };
 }
 
 // ---------- Endpoints ----------
@@ -159,7 +183,8 @@ export const api = {
   },
   today: {
     get: () => get<Today>('/today'),
-    logCall: (outcome: Outcome) => post<Today>('/today/calls', { outcome }),
+    /** Log one call; with leadId it is a call to that student and updates them too */
+    logCall: (outcome: Outcome, lead?: { leadId: number; note?: string; followUpOn?: string }) => post<Today>('/today/calls', { outcome, ...lead }),
     undoCall: (id: number) => del<Today>(`/today/calls/${id}`),
     submit: (note?: string) => post<Today>('/today/submit', { note: note || undefined }),
     punchIn: () => post<Today>('/today/punch-in'),
@@ -169,17 +194,33 @@ export const api = {
     list: (from: string, to?: string) => get<{ from: string; to: string; rows: DailyRow[]; days: string[] }>('/daily-reports', { from, to })
   },
   leads: {
-    list: (q: { view?: 'all' | 'active' | 'due' | 'overdue'; stage?: Stage; ownerId?: number; q?: string } = {}) => get<LeadList>('/leads', q),
+    list: (q: { view?: 'all' | 'active' | 'due' | 'overdue'; stage?: Stage; ownerId?: number; q?: string; batchId?: number } = {}) => get<LeadList>('/leads', q),
     get: (id: number) => get<LeadDetail>(`/leads/${id}`),
     create: (b: { name: string; phone: string; courseId: number; stage?: Stage; followUpOn?: string; nextAction?: string; ownerId?: number }) => post<{ lead: Lead }>('/leads', b),
     update: (id: number, b: Partial<{ name: string; courseId: number; stage: Stage; followUpOn: string | null; nextAction: string | null; ownerId: number }>) => patch<{ lead: Lead }>(`/leads/${id}`, b),
     addNote: (id: number, text: string) => post<{ note: LeadDetail['notes'][number] }>(`/leads/${id}/notes`, { text }),
     /** Send with commit=false to preview, then commit=true to save */
-    importFile: (file: File, ownerId: number, courseId: number, commit: boolean) => {
+    /** Admin: import students. assign = one BDE (ownerId), share equally, or share by availability */
+    importFile: (file: File, assign: ImportAssign, ownerId: number | null, courseId: number, commit: boolean) => {
       const f = new FormData();
-      f.append('ownerId', String(ownerId)); f.append('courseId', String(courseId)); f.append('commit', String(commit)); f.append('file', file);
+      f.append('assign', assign); if (ownerId) f.append('ownerId', String(ownerId));
+      f.append('courseId', String(courseId)); f.append('commit', String(commit)); f.append('file', file);
       return postForm<ImportResult>('/leads/import', f);
+    },
+    /** Admin: each import with how far its students have got */
+    batches: () => get<{ batches: ImportBatch[] }>('/leads/batches'),
+    /** The sheet to fill in for a bulk update (own leads for a BDE; the admin can filter) */
+    sheetUrl: (q: { view?: 'active' | 'all'; ownerId?: number; batchId?: number } = {}) => fileUrl('/leads/sheet/download.xlsx', q),
+    /** Upload the filled-in sheet: commit=false to preview, true to apply */
+    uploadSheet: (file: File, commit: boolean) => {
+      const f = new FormData();
+      f.append('commit', String(commit)); f.append('file', file);
+      return postForm<SheetResult>('/leads/sheet/upload', f);
     }
+  },
+  assign: {
+    board: () => get<{ bdes: BoardRow[] }>('/assign/board'),
+    move: (leadIds: number[], toBdeIds: number[]) => post<{ moved: number; skipped: number; perBde: { bde: UserRef; count: number }[] }>('/assign', { leadIds, toBdeIds })
   },
   interviews: {
     list: (when: 'today' | 'upcoming' | 'past' | 'all', ownerId?: number) => get<{ interviews: Interview[] }>('/interviews', { when, ownerId }),

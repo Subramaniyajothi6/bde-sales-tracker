@@ -21,6 +21,8 @@ import { leaves } from './routes/leaves.js';
 import { chat } from './routes/chat.js';
 import { activity } from './routes/activity.js';
 import { leadImport } from './routes/leadImport.js';
+import { leadSheet } from './routes/leadSheet.js';
+import { assign } from './routes/assign.js';
 import { reports } from './routes/reports.js';
 import { notifications } from './routes/notifications.js';
 
@@ -68,6 +70,7 @@ export function createApp() {
   app.use('/api/today', today);
   app.use('/api/daily-reports', dailyReports);
   app.use('/api/leads/import', leadImport);
+  app.use('/api/leads/sheet', leadSheet);
   app.use('/api/leads', leads);
   app.use('/api/interviews', interviews);
   app.use('/api/payments', payments);
@@ -78,6 +81,7 @@ export function createApp() {
   app.use('/api/chat', chat);
   app.use('/api/activity', activity);
   app.use('/api/reports', reports);
+  app.use('/api/assign', assign);
   app.use('/api/notifications', notifications);
   app.use('/api', () => { throw new HttpError(404, 'No such API endpoint'); });
 

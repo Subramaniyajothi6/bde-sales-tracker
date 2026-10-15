@@ -264,3 +264,67 @@ dialog .scroll { max-height: 260px; }
 /* Chat list: a tag (read-only, Admin) moves under the name when space is short, and never runs into the time */
 .person .grow-1 b { flex-wrap: wrap; row-gap: 2px; }
 .person .end { flex-shrink: 0; padding-left: 8px; }
+
+.list-row .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+/* ---------- Bulk update, imports and assigning ---------- */
+.sheet-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; }
+.sheet-steps li > .btn { margin-left: 8px; vertical-align: middle; }
+.change-list { margin: 0; padding-left: 16px; }
+tr.row-problem td { background: #FFFBF5; }
+.batch-bar { background: var(--primary-tint); justify-content: space-between; }
+table.data.imports td small, table.data.assign-table td small { font-size: 11.5px; }
+table.data tr.sub-row td { background: #FAFBFC; font-size: 13.5px; height: 40px; }
+table.data .flow-paid { color: var(--green); font-weight: 600; }
+table.data .flow-not_interested { color: var(--soft); }
+.assign-source { display: flex; flex-direction: column; gap: 14px; }
+table.data.assign-table tr.group-row th { background: var(--card); height: auto; padding-top: 8px; padding-bottom: 0; border-bottom: 0; box-shadow: none; position: static; }
+table.data.assign-table th.grp { text-align: center; font-weight: 600; color: var(--ink); border-bottom: 2px solid var(--line); }
+table.data.assign-table tr.picked td { background: var(--primary-tint); }
+table.data.assign-table tr.away td { color: var(--faint); }
+table.data.assign-table td .who a, table.data.assign-table td.who a { color: inherit; text-decoration: none; }
+table.data.assign-table td.who b { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.assign-foot { align-items: center; position: sticky; bottom: 0; z-index: 4; background: var(--card); color: var(--ink); font-size: 14px; box-shadow: 0 -6px 12px rgba(15, 23, 42, .06); }
+
+/* ---------- Today: call list. Pick who you called, then how it went ---------- */
+.call-list { max-height: 640px; overflow-y: auto; }
+.call-row { border-top: 1px solid var(--line); padding: 12px 20px; display: flex; flex-direction: column; gap: 12px; }
+.call-row.on { background: #FAFBFF; box-shadow: inset 3px 0 0 var(--primary); }
+.call-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px 16px; align-items: center; }
+.call-pick { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 260px; }
+.call-row > .call-pick { flex: none; }
+.call-pick:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; border-radius: 4px; }
+.call-pick:hover .cc-name { color: var(--primary); }
+.cc-name { font-weight: 600; font-size: 15px; color: var(--ink); }
+.cc-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
+.cc-dial { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.call-body { display: flex; flex-direction: column; gap: 10px; }
+.call-number { max-width: 260px; }
+.cc-outcomes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.cc-btn { min-height: 44px; border: 1px solid var(--line); border-left: 4px solid var(--k, var(--faint)); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 10px; -webkit-tap-highlight-color: transparent; }
+.cc-btn:hover { background: var(--hover); border-color: #CDD3DC; border-left-color: var(--k, var(--faint)); }
+.cc-btn:active { background: var(--line-2); }
+.cc-btn[disabled] { opacity: .5; cursor: not-allowed; }
+.cc-more { display: grid; grid-template-columns: minmax(0, 1fr) 180px; gap: 12px; }
+.cc-more-link { align-self: flex-start; padding-left: 0; font-weight: 500; font-size: 13px; min-height: 0; }
+@media (max-width: 700px) {
+  .call-row { padding: 12px 16px; }
+  .cc-outcomes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cc-btn { min-height: 48px; }
+  .cc-more { grid-template-columns: 1fr; }
+  .cc-dial .btn:first-child { flex: 1; }
+  .call-list { max-height: none; }
+}
+.call-done { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 20px; background: #ECFDF3; border-top: 1px solid var(--line); color: var(--ink); }
+.call-done .linkbtn { font-weight: 600; }
+
+/* Where a change came from: the call list on Today, Excel or an import */
+.src-tag { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 4px; padding: 0 6px; line-height: 18px; white-space: nowrap; vertical-align: 1px; }
+.src-call { color: var(--primary); background: var(--primary-tint); }
+.src-sheet { color: #166534; background: #DCFCE7; }
+.src-import { color: #6B21A8; background: #F3E8FF; }
+.history-list { max-height: 520px; overflow-y: auto; }
+.history-list .log-row { flex-wrap: wrap; row-gap: 4px; padding-top: 8px; padding-bottom: 8px; }
+.history-list .what { flex: 1 1 240px; min-width: 0; }
+.sheet-dot { background: #16A34A; }
+.sheet-lines { color: var(--ink); }

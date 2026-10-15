@@ -1,3 +1,12 @@
 # Local-only notes with passwords
 TEST-ACCOUNTS.md
 HANDOVER.md
+
+# Claude Code settings for this computer only
+.claude/settings.local.json
+
+# Sample files for trying the Excel import by hand
+test-files/
+
+# Local database backups (may contain personal data)
+backups/

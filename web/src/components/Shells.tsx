@@ -79,6 +79,7 @@ function Shell({ role }: { role: 'admin' | 'bde' }) {
   const items: [string, string, ReactNode, number, string][] = role === 'admin' ? [
     ['/admin', 'Dashboard', ICON.dashboard, 0, ''], ['/admin/report', 'Reports', ICON.reports, 0, ''],
     ['/admin/attendance', 'Attendance', ICON.attendance, counts.leaves, 'leave requests waiting'], ['/admin/leads', 'Leads', ICON.leads, 0, ''],
+    ['/admin/assign', 'Assign leads', ICON.team, 0, ''],
     ['/admin/interviews', 'Interviews', ICON.interviews, 0, ''], ['/admin/payments', 'Payments', ICON.payments, counts.receipts, 'receipts to verify'],
     ['/admin/chat', 'Chat', ICON.chat, unread, 'unread messages'],
     ['/admin/team', 'Team', ICON.team, 0, ''], ['/admin/activity', 'Activity', ICON.activity, 0, '']

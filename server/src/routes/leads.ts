@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 import { db } from '../lib/db.js';
 import { HttpError, forbidden, notFound } from '../lib/http.js';
-import { isAdmin, me } from '../lib/auth.js';
+import { isAdmin, me, requireAdmin } from '../lib/auth.js';
 import { normalizePhone, formatPhone } from '../lib/phone.js';
 import { dateOnly, todayIST, ymd } from '../lib/time.js';
 import { userRef } from '../lib/present.js';
@@ -17,11 +17,15 @@ export const STAGE_LABEL: Record<(typeof STAGES)[number], string> = {
   NEW: 'New', INTERESTED: 'Interested', FOLLOW_UP: 'Follow-up', INTERVIEW_SCHEDULED: 'Interview scheduled',
   SELECTED: 'Selected', PAYMENT_COMMITTED: 'Payment committed', PAID: 'Paid', NOT_INTERESTED: 'Not interested'
 };
+/** Next actions the app writes itself; a call or a status change from Excel replaces these, but keeps one the BDE typed */
+export const AUTO_ACTIONS = ['First call', 'Book the interview', 'Call back', 'Try calling again'];
+/** The next action that goes with a status, as a call on Today would set it */
+export const STAGE_ACTION: Partial<Record<(typeof STAGES)[number], string>> = { INTERESTED: 'Book the interview', FOLLOW_UP: 'Call back' };
 const CLOSED = ['PAID', 'NOT_INTERESTED'] as const;
-const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-10-12');
+export const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-10-12');
 
 /** A new or changed follow-up date can't be in the past. */
-function checkFollowUp(date: string | null | undefined) {
+export function checkFollowUp(date: string | null | undefined) {
   if (date && date < todayIST()) throw new HttpError(400, 'Choose today or a later date for the follow-up');
 }
 // These two statuses follow real events: an interview booked, and the full fee verified
@@ -64,12 +68,15 @@ leads.get('/', async (req, res) => {
     stage: z.enum(STAGES).optional(),
     ownerId: z.coerce.number().int().optional(),
     q: z.string().trim().optional(),
-    view: z.enum(['all', 'active', 'due', 'overdue']).optional()
+    view: z.enum(['all', 'active', 'due', 'overdue']).optional(),
+    /** Only the leads from one of the admin's imports */
+    batchId: z.coerce.number().int().optional()
   }).parse(req.query);
   const today = dateOnly(todayIST());
 
   const base: Prisma.LeadWhereInput = {
     ...(isAdmin(req) ? (f.ownerId ? { ownerId: f.ownerId } : {}) : { ownerId: me(req).id }),
+    ...(f.batchId ? { batchId: f.batchId } : {}),
     ...(f.q ? { OR: [{ name: { contains: f.q } }, ...(f.q.replace(/\D/g, '') ? [{ phone: { contains: f.q.replace(/\D/g, '') } }] : [])] } : {})
   };
   const open = { stage: { notIn: [...CLOSED] } };
@@ -81,7 +88,7 @@ leads.get('/', async (req, res) => {
   };
   const view = viewWhere[f.view ?? 'all'];
 
-  const [list, byStage, overdue, due, active] = await Promise.all([
+  const [list, byStage, overdue, due, active, all] = await Promise.all([
     db.lead.findMany({
       where: { ...base, ...view, ...(f.stage ? { stage: f.stage } : {}) },
       include: { course: true, owner: true },
@@ -91,13 +98,15 @@ leads.get('/', async (req, res) => {
     db.lead.groupBy({ by: ['stage'], where: { ...base, ...view }, _count: { _all: true } }),
     db.lead.count({ where: { ...base, ...viewWhere.overdue } }),
     db.lead.count({ where: { ...base, ...viewWhere.due } }),
-    db.lead.count({ where: { ...base, ...viewWhere.active } })
+    db.lead.count({ where: { ...base, ...viewWhere.active } }),
+    db.lead.count({ where: base })
   ]);
   res.json({
     leads: list.map(leadOut),
     counts: {
       byStage: Object.fromEntries(STAGES.map(s => [s, byStage.find(g => g.stage === s)?._count._all ?? 0])),
-      overdue, due, active
+      // byStage follows the chosen view; overdue, due, active and all are always the full counts
+      overdue, due, active, all
     }
   });
 });
@@ -155,6 +164,38 @@ leads.post('/', async (req, res) => {
   res.status(201).json({ lead: leadOut(lead) });
 });
 
+/**
+ * The admin's imports, newest first, with how far their students have got:
+ * a count per status for the whole batch and for each BDE in it, and how many have been called.
+ */
+leads.get('/batches', requireAdmin, async (_req, res) => {
+  const batches = await db.importBatch.findMany({ include: { createdBy: true }, orderBy: { id: 'desc' }, take: 50 });
+  const ids = batches.map(b => b.id);
+  const [byStage, byOwnerStage] = await Promise.all([
+    db.lead.groupBy({ by: ['batchId', 'stage'], where: { batchId: { in: ids } }, _count: { _all: true } }),
+    db.lead.groupBy({ by: ['batchId', 'ownerId', 'stage'], where: { batchId: { in: ids } }, _count: { _all: true } })
+  ]);
+  const owners = await db.user.findMany({ where: { id: { in: [...new Set(byOwnerStage.map(r => r.ownerId))] } } });
+  const stageCounts = (rows: { stage: string; _count: { _all: number } }[]) =>
+    Object.fromEntries(STAGES.map(s => [s, rows.filter(r => r.stage === s).reduce((t, r) => t + r._count._all, 0)]));
+  res.json({
+    batches: batches.map(b => {
+      const mine = byOwnerStage.filter(r => r.batchId === b.id);
+      return {
+        id: b.id, fileName: b.fileName, createdAt: b.createdAt, createdBy: b.createdBy.name, count: b.count,
+        // Every lead from the batch, wherever it is now (moving a lead to another BDE keeps it in the batch)
+        stages: stageCounts(byStage.filter(r => r.batchId === b.id)),
+        // Called = moved on from "Not called"
+        called: byStage.filter(r => r.batchId === b.id && r.stage !== 'NEW').reduce((t, r) => t + r._count._all, 0),
+        byBde: [...new Set(mine.map(r => r.ownerId))].map(id => {
+          const u = owners.find(o => o.id === id)!;
+          return { bde: userRef(u), stages: stageCounts(mine.filter(r => r.ownerId === id)) };
+        }).sort((x, y) => x.bde.name.localeCompare(y.bde.name))
+      };
+    })
+  });
+});
+
 leads.get('/:id', async (req, res) => {
   const lead = await leadFor(req, Number(req.params.id));
   const [notes, interviews, payments, money] = await Promise.all([
@@ -166,7 +207,7 @@ leads.get('/:id', async (req, res) => {
   res.json({
     lead: leadOut(lead),
     money,
-    notes: notes.map(n => ({ id: n.id, text: n.text, author: n.author.name, createdAt: n.createdAt })),
+    notes: notes.map(n => ({ id: n.id, text: n.text, author: n.author.name, source: n.source, createdAt: n.createdAt })),
     interviews: interviews.map(i => ({ id: i.id, scheduledAt: i.scheduledAt, status: i.status, result: i.result })),
     payments: payments.map(p => ({ id: p.id, amount: p.amount, status: p.status, date: ymd(p.date), check: p.check, closedAt: p.closedAt }))
   });

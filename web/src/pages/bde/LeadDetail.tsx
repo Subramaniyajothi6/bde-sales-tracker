@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api, type LeadDetail as Detail, type Stage } from '../../api';
 import { errorText, useLoad, useToast } from '../../lib/hooks';
 import { CHECK_LABEL, INTERVIEW_LABEL, PAYMENT_LABEL, RESULT_LABEL, STAGES, STAGE_LABEL, addDays, fmtDate, fmtTime, istDate, rupee, todayIST } from '../../lib/format';
-import { Badge, Empty, ErrorNote, Icons, Loading, Modal } from '../../components/ui';
+import { Badge, Empty, ErrorNote, Icons, Loading, Modal, SourceTag } from '../../components/ui';
 import { PageHead } from '../../components/PageHead';
 
 export default function LeadDetail() {
@@ -127,7 +127,7 @@ export default function LeadDetail() {
 
 function History({ data }: { data: Detail }) {
   const items = [
-    ...data.notes.map(n => ({ at: n.createdAt, node: <span>{n.text}</span> })),
+    ...data.notes.map(n => ({ at: n.createdAt, node: <span>{n.text} <SourceTag source={n.source} /></span> })),
     ...data.interviews.map(i => ({ at: i.scheduledAt, node: <span>Interview at {fmtTime(i.scheduledAt)}: <Badge label={INTERVIEW_LABEL[i.status]} /> {i.result && <Badge label={RESULT_LABEL[i.result]} />}</span> })),
     ...data.payments.map(p => ({ at: `${p.date}T12:00:00Z`, node: <span>{PAYMENT_LABEL[p.status]} {rupee(p.amount)} {p.check && <Badge label={CHECK_LABEL[p.check]} />}</span> }))
   ].sort((a, b) => (a.at < b.at ? 1 : -1));

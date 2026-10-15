@@ -54,14 +54,14 @@ The frontend turns these into words on screen (e.g. `NO_SHOW` → "Missed").
 ## Today (BDE's working day)
 
 All return the **today** object:
-`{ date, target, cutoff: "19:30", counts: { INTERESTED, CALL_BACK, NOT_INTERESTED, NO_ANSWER }, total, recent: [{ id, outcome, calledAt }], submittedAt, note, punchIn, punchOut, onLeave, todo: { followUps, interviewsToMark, paymentsDue } }`
+`{ date, target, cutoff: "19:30", counts: { INTERESTED, CALL_BACK, NOT_INTERESTED, NO_ANSWER }, total, recent: [{ id, outcome, calledAt, lead: { id, name } | null }], history: [{ kind: "CALL" | "SHEET", id, at, outcome, lead, lines }], submittedAt, note, punchIn, punchOut, onLeave, todo: { followUps, interviewsToMark, paymentsDue } }`
 
 | Method and path | Who | Send |
 |---|---|---|
 | `GET /today` | BDE | |
 | `POST /today/punch-in` | BDE | Start the working day (attendance). Doing it again keeps the first time. |
-| `POST /today/calls` | BDE | `{ outcome }`. Logs one call, and punches in if not done yet. 409 if today's report is already sent. |
-| `DELETE /today/calls/:id` | BDE | Undo a call from today |
+| `POST /today/calls` | BDE | `{ outcome, leadId?, note?, followUpOn? }`. Logs one call, and punches in if not done yet. With `leadId` (a student picked from the call list) it also updates the student: Interested → Interested, Call back later → Follow-up, Not interested → Not interested (follow-up cleared), No answer → status kept; the follow-up moves to tomorrow (or `followUpOn`) and a history line is written. Refused for a lead that has paid in full. 409 if today's report is already sent. |
+| `DELETE /today/calls/:id` | BDE | Undo a call from today. For a call to a student, their status, follow-up and next action go back to what they were, unless they were changed after the call. |
 | `POST /today/submit` | BDE | `{ note? }` (up to 500 characters, for the admin). Sends today's report and punches out. |
 | `POST /today/reopen` | BDE | Reopen today's report to fix it. Clears the punch out until it is sent again. |
 
@@ -80,7 +80,10 @@ All return the **today** object:
 | `GET /leads/:id` | Any | | `{ lead, money: { fee, paid, balance }, notes, interviews, payments }` |
 | `PATCH /leads/:id` | Any | any of `{ name, courseId, stage, followUpOn, nextAction }`; admins can also send `ownerId` to move it | `{ lead }`. Changes are written to the lead's history. **400** if `stage` becomes `INTERVIEW_SCHEDULED` with no booked interview, or `PAID` before the full fee is verified, or `followUpOn` changes to a date before today. |
 | `POST /leads/:id/notes` | Any | `{ text }` | `{ note }` |
-| `POST /leads/import` | Admin | **multipart form**: file `file` (.xlsx or .csv, max 5 MB, up to 2000 rows), `ownerId`, `courseId` (used when a row names no course), `commit` (`false` = preview only) | `{ file, owner, columns, rows, ready, created, preview: [first 8], skipped: [{ row, name, phone, reason }], skippedCount }`. Each imported row becomes a `NEW` lead with a follow-up today. Bad numbers, numbers that are already leads and repeats in the file are skipped. |
+| `GET /leads/batches` | Admin | | `{ batches: [{ id, fileName, createdAt, createdBy, count, called, stages, byBde: [{ bde, stages }] }] }`: each import and how far its students have got. `GET /leads?batchId=` lists one import's leads. |
+| `GET /leads/sheet/download.xlsx?view=active|all&ownerId=&batchId=` | Any | | The bulk-update sheet: own leads for a BDE, any for the admin. Green columns are editable; Status, Attended? and Result have dropdowns. |
+| `POST /leads/sheet/upload` | Any | **multipart form**: file `file`, `commit` (`false` = preview) | `{ rows, changed, added, unchanged, problems, applied, items: [{ row, leadId, name, changes, errors }] }`. Same rules as the lead and interview screens; rows with problems are not applied. A row with no Lead ID but a Candidate and Phone adds a new student (Course and Status from the row; the admin also gives a BDE ID); `row` is the Excel row number. |
+| `POST /leads/import` | Admin | **multipart form**: file `file` (.xlsx or .csv, max 5 MB, up to 2000 rows), `assign` (`one` with `ownerId`, `share` equally, or `available`: skip BDEs on leave, fewest open leads first), `courseId` (used when a row names no course), `commit` (`false` = preview only). A "BDE ID" column in the file decides for its rows. | `{ file, owner, columns, rows, ready, created, preview: [first 8], skipped: [{ row, name, phone, reason }], skippedCount }`. Each imported row becomes a `NEW` lead with a follow-up today. Bad numbers, numbers that are already leads and repeats in the file are skipped. |
 
 `lead` = `{ id, name, phone, course: { id, name, type, fee }, owner: { id, employeeId, name }, stage, followUpOn, nextAction, createdAt }`
 
@@ -120,6 +123,13 @@ All return the **today** object:
 | Method and path | Who | Get back |
 |---|---|---|
 | `GET /reports?from=&to=` | Admin | `{ from, to, days, rows: [{ bde, report: { status, sentDays, dueDays, submittedAt, note }, counts, calls, target, interested, interviewsScheduled, interviewsAttended, interviewsMissed, committed, paid, revenue, daysOnTarget, daysWorked }], totals }`. Both the daily-report numbers and the monthly-report numbers for any period up to a year. `target` counts working days up to today, not counting approved leave. |
+
+## Assigning leads (Admin)
+
+| Method and path | Who | Send | Get back |
+|---|---|---|---|
+| `GET /assign/board` | Admin | | `{ bdes: [{ bde, today, callsToday, load: { open, due, overdue, notCalled }, month: { callsPerDay, interestedRate, interviewsAttended, showRate, paid, revenue, daysOnTarget, daysWorked } }] }` |
+| `POST /assign` | Admin | `{ leadIds, toBdeIds }` | `{ moved, skipped, perBde }`. Leads are dealt out in turn, in the order the BDEs are given; each BDE is notified. |
 
 ## Attendance
 

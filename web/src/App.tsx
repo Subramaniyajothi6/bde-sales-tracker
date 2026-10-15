@@ -21,6 +21,7 @@ import Month from './pages/bde/Month';
 import Profile from './pages/bde/Profile';
 import Attendance from './pages/admin/Attendance';
 import Report from './pages/admin/Report';
+import Assign from './pages/admin/Assign';
 import Activity from './pages/admin/Activity';
 import ChatPage from './pages/Chat';
 
@@ -73,6 +74,7 @@ export default function App() {
         <Route path="team" element={<Team />} />
         <Route path="bde/:id" element={<BdeDetail />} />
         <Route path="report" element={<Report />} />
+        <Route path="assign" element={<Assign />} />
         <Route path="attendance" element={<Attendance />} />
         <Route path="activity" element={<Activity />} />
         <Route path="chat" element={<ChatPage role="admin" />} />
@@ -82,6 +84,7 @@ export default function App() {
 
       <Route path="/bde" element={<Only role="BDE"><BdeShell /></Only>}>
         <Route index element={<Today />} />
+        <Route path="calling" element={<Navigate to="/bde" replace />} />
         <Route path="leads" element={<BdeLeads />} />
         <Route path="leads/:id" element={<LeadDetail />} />
         <Route path="interviews" element={<BdeInterviews />} />

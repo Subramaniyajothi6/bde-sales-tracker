@@ -40,9 +40,13 @@ interface Col<R> {
   total?: boolean;
   /** Colour a cell, e.g. a status, by returning a tone */
   tone?: (r: R) => Tone | null;
+  /** People fill this column in (bulk update sheets): green heading */
+  editable?: boolean;
+  /** Choices offered as a dropdown in every row of this column */
+  list?: string[];
 }
 
-interface Sheet<R> {
+export interface Sheet<R> {
   filename: string;
   title: string;
   subtitle: string;
@@ -65,7 +69,7 @@ function downloadedAt() {
   return `${humanDate(todayIST())} ${todayIST().slice(0, 4)}, ${time}`;
 }
 
-async function sendSheet<R>(res: Response, s: Sheet<R>) {
+export async function sendSheet<R>(res: Response, s: Sheet<R>) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'ADZ4NEEDZ BDE Sales Tracker';
   wb.created = new Date();
@@ -97,9 +101,9 @@ async function sendSheet<R>(res: Response, s: Sheet<R>) {
   const head = ws.getRow(HEADER_ROW);
   head.values = s.cols.map(c => c.header);
   head.height = 32;
-  head.eachCell(cell => {
+  head.eachCell((cell, j) => {
     cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
-    cell.fill = fill(C.primary);
+    cell.fill = fill(s.cols[j - 1]?.editable ? C.green : C.primary);
     cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
     cell.border = { left: thin(C.primary), right: thin('FF3B66E0'), top: thin(C.primary), bottom: thin(C.primary) };
   });
@@ -155,6 +159,17 @@ async function sendSheet<R>(res: Response, s: Sheet<R>) {
   } else {
     ws.autoFilter = { from: { row: HEADER_ROW, column: 1 }, to: { row: last, column: n } };
   }
+  // Dropdown choices for list columns, on every row plus room for a few more
+  s.cols.forEach((c, j) => {
+    if (!c.list?.length) return;
+    const letter = ws.getColumn(j + 1).letter;
+    for (let r = first; r <= Math.max(last, first) + 20; r++) {
+      ws.getCell(`${letter}${r}`).dataValidation = {
+        type: 'list', allowBlank: true, formulae: [`"${c.list.join(',')}"`],
+        showErrorMessage: true, errorTitle: 'Pick from the list', error: `Choose one of: ${c.list.join(', ')}`
+      };
+    }
+  });
   ws.views = [{ state: 'frozen', ySplit: HEADER_ROW, xSplit: s.freezeCols ?? 0, showGridLines: false }];
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

@@ -36,6 +36,16 @@ These follow the company's Ad Squad workspace, cut down to what a BDE team needs
 | How are leads imported? | The admin uploads an .xlsx or .csv and picks one BDE and a default course. Rows become **New** leads with a follow-up today. Bad numbers, numbers that are already leads, and repeats are skipped and listed before anything is saved. | Easy: split one file across several BDEs. |
 | What is in the activity log? | Logins, start of day, reports, leads added, moved or imported, interviews, payments and receipt checks, leave, and team changes. Admin only. | Easy. |
 
+## Bulk work and assigning (added 15 Oct 2026)
+
+| Question | What the app does now | To change it |
+|---|---|---|
+| How do new students come in? | The admin imports an Excel or CSV. Rows go to one BDE, are shared equally, or are shared by availability (BDEs on leave today are skipped; the fewest open leads go first). A "BDE ID" column decides for its rows. Each import is a batch the admin follows under Leads > Imports. | Easy. |
+| How does a BDE log a call? | Today shows the call list: students due today and overdue, plus "New number" for someone not in the list. The BDE picks who they called, then taps how it went (or presses 1 to 4). A call to a student counts for the report and updates the student's status, follow-up and history. A new number is only counted; if Interested, "Add them as a lead" opens with the number filled in. Undo puts both the count and the student back. | Easy. |
+| How do we see where a change came from? | Every line in a student's history is marked: "Call list" (a call on Today), "Excel" (Update from Excel) or "Import" (the admin's import). Lines with no mark were made on the lead page. Today's history lists the day's calls and Excel changes together, newest first. | Easy. |
+| Can BDEs update many leads at once? | Yes: download the sheet (My leads > Update from Excel), fill in the green columns, upload. A preview shows every change and every row that can't be applied, then Apply. Same rules as one at a time: Paid only from verified fees, no past dates, interview steps set the status. New students the BDE called go in rows at the bottom with no Lead ID; they are added as the BDE's leads (number not already a lead, course one of ours, status not New or Paid). | Easy: add columns. |
+| How does the admin choose who gets more leads? | Assign leads compares every BDE: today's attendance, workload (open, overdue, not called) and this month's results (calls a day, interested %, interviews, paid, revenue, days on target). The suggested order is: started today (then not in yet, then on leave), fewest overdue, most revenue, most calls a day (calls divided by the days the BDE called). The admin ticks BDEs and the students are dealt out in turn. | Easy: change the suggested order. |
+
 ## Screens
 
 - The brief asks for a web application and doesn't mention phones, and most BDEs work on laptops. So **every screen (BDE and admin) is laid out for a laptop first**: a left menu, wide tables, and side-by-side panels.

@@ -3,9 +3,11 @@ import { useSearchParams } from 'react-router-dom';
 import { api, type Stage } from '../../api';
 import { download, errorText, useLoad, useToast } from '../../lib/hooks';
 import { STAGES, STAGE_LABEL, fmtDate, istDate, rupee } from '../../lib/format';
-import { Badge, Due, Empty, ErrorNote, Loading, Modal } from '../../components/ui';
+import { Badge, Due, Empty, ErrorNote, Loading, Modal, SourceTag } from '../../components/ui';
 import { PageHead } from '../../components/PageHead';
 import { ImportLeads } from './ImportLeads';
+import { Imports } from './Imports';
+import { SheetUpdate } from '../../components/SheetUpdate';
 
 export default function Leads() {
   const [params] = useSearchParams();
@@ -15,13 +17,17 @@ export default function Leads() {
   const [overdue, setOverdue] = useState(params.get('view') === 'overdue');
   const [openId, setOpenId] = useState<number | null>(null);
   const [importing, setImporting] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  // "leads" = the list; "imports" = each import's progress
+  const [tab, setTab] = useState<'leads' | 'imports'>(params.get('tab') === 'imports' ? 'imports' : 'leads');
+  const [batch, setBatch] = useState<{ id: number; name: string } | null>(null);
   const bdes = useLoad(() => api.users.list({ status: 'active' }));
   const { data, error, reload } = useLoad(
-    () => api.leads.list({ view: overdue ? 'overdue' : 'all', stage: stage || undefined, ownerId: owner ? Number(owner) : undefined, q: q.trim() || undefined }),
-    [stage, owner, q, overdue]);
+    () => api.leads.list({ view: overdue ? 'overdue' : 'all', stage: stage || undefined, ownerId: owner ? Number(owner) : undefined, q: q.trim() || undefined, batchId: batch?.id }),
+    [stage, owner, q, overdue, batch?.id]);
   const total = data ? Object.values(data.counts.byStage).reduce((a, b) => a + b, 0) : 0;
 
-  const clear = () => { setStage(''); setOwner(''); setQ(''); setOverdue(false); };
+  const clear = () => { setStage(''); setOwner(''); setQ(''); setOverdue(false); setBatch(null); };
 
   return (
     <>
@@ -29,12 +35,18 @@ export default function Leads() {
       <main className="wrap">
         <section className="panel">
           <div className="panel-head">
-            <h2>{data ? `${data.leads.length} lead${data.leads.length === 1 ? '' : 's'}` : 'Leads'}</h2>
+            <div className="seg" role="group" aria-label="Show">
+              <button type="button" aria-pressed={tab === 'leads'} onClick={() => setTab('leads')}>{data ? `${data.leads.length} lead${data.leads.length === 1 ? '' : 's'}` : 'Leads'}</button>
+              <button type="button" aria-pressed={tab === 'imports'} onClick={() => setTab('imports')}>Imports</button>
+            </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" className="btn ghost" onClick={() => setImporting(true)}>Import from Excel</button>
+              <button type="button" className="btn ghost" onClick={() => setUpdating(true)}>Update from Excel</button>
               <button type="button" className="btn ghost" onClick={() => download(api.exports.leads())}>Download Excel</button>
             </div>
           </div>
+          {tab === 'imports' ? <Imports onOpenBatch={b => { clear(); setBatch({ id: b.id, name: b.fileName }); setTab('leads'); }} /> : <>
+          {batch && <div className="toolbar batch-bar"><span>Showing the import <b>{batch.name}</b></span><button type="button" className="linkbtn" onClick={() => setBatch(null)}>Show all leads</button></div>}
           <div className="toolbar">
             <div className="chips" role="group" aria-label="Status">
               <button type="button" className="chip" aria-pressed={stage === ''} onClick={() => setStage('')}>All {data && <b>{total}</b>}</button>
@@ -73,9 +85,12 @@ export default function Leads() {
               </table>
             </div>
           )}
+          </>}
         </section>
       </main>
-      <ImportLeads open={importing} onClose={() => setImporting(false)} onDone={() => { setImporting(false); void reload(); }} />
+      <ImportLeads open={importing} onClose={() => setImporting(false)} onDone={() => { setImporting(false); setTab('imports'); void reload(); }} />
+      <SheetUpdate open={updating} onClose={() => setUpdating(false)} onDone={() => { setUpdating(false); void reload(); }}
+        filter={{ ownerId: owner ? Number(owner) : undefined, batchId: batch?.id }} />
       <LeadDrawer id={openId} bdes={bdes.data?.users ?? []} onClose={() => setOpenId(null)} onSaved={reload} />
     </>
   );
@@ -130,7 +145,7 @@ function LeadDrawer({ id, bdes, onClose, onSaved }: { id: number | null; bdes: {
           <div>
             <div className="h3">Notes</div>
             <div className="timeline">
-              {data.notes.map(n => <div className="t" key={n.id}><span className="when">{fmtDate(istDate(n.createdAt))}</span><span>{n.text} <small className="muted">({n.author})</small></span></div>)}
+              {data.notes.map(n => <div className="t" key={n.id}><span className="when">{fmtDate(istDate(n.createdAt))}</span><span>{n.text} <small className="muted">({n.author})</small> <SourceTag source={n.source} /></span></div>)}
             </div>
           </div>
           {err && <span className="err" role="alert">{err}</span>}

@@ -97,6 +97,7 @@ model User {
   channelMessages ChannelMessage[]
   channelReads    ChannelRead[]
   notifications   Notification[]
+  importBatches   ImportBatch[]
 }
 
 model Course {
@@ -120,17 +121,29 @@ model Lead {
   stage      LeadStage @default(INTERESTED)
   followUpOn DateTime? @db.Date
   nextAction String?   @db.VarChar(200)
+  /// The admin's import this lead came from, if any (for tracking each batch)
+  batchId    Int?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  course     Course      @relation(fields: [courseId], references: [id])
-  owner      User        @relation("LeadOwner", fields: [ownerId], references: [id])
+  course     Course       @relation(fields: [courseId], references: [id])
+  owner      User         @relation("LeadOwner", fields: [ownerId], references: [id])
+  batch      ImportBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
   notes      LeadNote[]
   interviews Interview[]
   payments   Payment[]
+  calls      CallLog[]
 
   @@index([ownerId, stage])
+  @@index([batchId])
   @@index([followUpOn])
+}
+
+enum NoteSource {
+  PAGE
+  CALL
+  SHEET
+  IMPORT
 }
 
 model LeadNote {
@@ -138,6 +151,8 @@ model LeadNote {
   leadId    Int
   authorId  Int
   text      String   @db.VarChar(500)
+  /// Where the change was made: the lead page, the call list on Today, an Excel upload, or an import
+  source    NoteSource @default(PAGE)
   createdAt DateTime @default(now())
 
   lead   Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
@@ -154,11 +169,17 @@ model CallLog {
   calledAt DateTime    @default(now())
   /// India date the call belongs to
   workDate DateTime    @db.Date
+  /// The student called, picked from the call list on Today; empty for a new number
+  leadId   Int?
+  /// The student's status, follow-up and next action before and after this call, so a wrong tap can be undone
+  undo     Json?
 
-  bde User @relation(fields: [bdeId], references: [id])
+  bde  User  @relation(fields: [bdeId], references: [id])
+  lead Lead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
 
   @@index([bdeId, workDate])
   @@index([workDate])
+  @@index([leadId])
 }
 
 /// Marks a day's report as sent. Numbers come from CallLog.
@@ -363,4 +384,17 @@ model Notification {
 
   @@index([userId, id])
   @@index([userId, readAt])
+}
+
+/// One bulk import of students by the admin. Its leads are tracked together on the Leads page.
+model ImportBatch {
+  id          Int      @id @default(autoincrement())
+  fileName    String   @db.VarChar(200)
+  createdById Int
+  /// Leads created by the import
+  count       Int
+  createdAt   DateTime @default(now())
+
+  createdBy User   @relation(fields: [createdById], references: [id])
+  leads     Lead[]
 }

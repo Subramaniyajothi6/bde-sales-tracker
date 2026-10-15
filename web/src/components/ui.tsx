@@ -1,6 +1,12 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { badgeClass, dueInfo } from '../lib/format';
 
+/** Where a change was made: the call list on Today, an Excel upload or an import. Changes on the lead page have no tag. */
+const SOURCE_LABEL: Record<string, string> = { CALL: 'Call list', SHEET: 'Excel', IMPORT: 'Import' };
+export function SourceTag({ source }: { source: string }) {
+  return SOURCE_LABEL[source] ? <span className={`src-tag src-${source.toLowerCase()}`}>{SOURCE_LABEL[source]}</span> : null;
+}
+
 export function Badge({ label }: { label: string | null | undefined }) {
   if (!label) return null;
   return <span className={`badge ${badgeClass(label)}`}>{label}</span>;

@@ -1,7 +1,9 @@
 // End-to-end check of every API flow against a running server.
-// DEVELOPMENT DATABASE ONLY: it creates test leads, payments and a BDE account.
+// DEVELOPMENT DATABASE ONLY: it creates test leads, payments, leave, messages and a BDE account,
+// and removes them again at the end (see "Clean up"), so the sample BDEs' history stays as it was.
 // Needs the sample data (SEED_SAMPLE_DATA=true) and the server running:  npm run dev,  then  npm run check:api
 import 'dotenv/config';
+import { PrismaClient } from '@prisma/client';
 const BASE = process.env.API_URL ?? `http://localhost:${process.env.PORT ?? 4000}/api`;
 const ADMIN_PW = process.env.SEED_ADMIN_PASSWORD;
 let pass = 0, fail = 0;
@@ -24,6 +26,14 @@ function client() {
 }
 
 const admin = client(), bde = client(), other = client(), anon = client();
+// Everything this run adds is removed at the end. Note what was there before it started.
+const db = new PrismaClient();
+const START = new Date();
+// Works with any number of BDEs and with an empty database, not only the 30-BDE sample data
+const activeBdes = await db.user.count({ where: { role: 'BDE', active: true } });
+const karthikUser = await db.user.findUnique({ where: { employeeId: 'BDE-014' } });
+const hadAttendance = !!(await db.attendance.findFirst({ where: { userId: karthikUser.id, workDate: new Date(new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)) } }));
+const hadReport = !!(await db.dailyReport.findFirst({ where: { bdeId: karthikUser.id, workDate: new Date(new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)) } }));
 const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
 
 console.log('Auth');
@@ -56,7 +66,7 @@ ok(r.data.submittedAt === null, 'reopen report');
 
 console.log('Daily reports');
 r = await admin('GET', '/daily-reports');
-ok(r.status === 200 && r.data.rows.length >= 30, 'a row per active BDE today', r.data.rows?.length);
+ok(r.status === 200 && r.data.rows.length === activeBdes, 'a row per active BDE today', r.data.rows?.length);
 const karthik = r.data.rows.find(x => x.bde.employeeId === 'BDE-014');
 // Sample data may have no calls today (it is dated when seeded), so both states are right
 ok(karthik && karthik.total === before && karthik.status === (before ? 'CALLING' : 'NOT_STARTED'), 'Karthik row matches his today total', karthik);
@@ -76,6 +86,19 @@ ok((await bde('POST', '/leads', { name: 'X', phone: '12345', courseId: courses[0
 ok((await other('GET', `/leads/${leadId}`)).status === 403, "other BDE can't open my lead");
 r = await bde('GET', '/leads?view=due');
 ok(r.status === 200 && r.data.leads.every(l => l.owner.employeeId === 'BDE-014') && r.data.leads.some(l => l.id === leadId), 'BDE sees only own leads; new lead is due');
+// A call to this student from the call list on Today, and undoing it
+ok((await other('POST', '/today/calls', { outcome: 'INTERESTED', leadId })).status === 403, "other BDE can't log a call to my lead");
+ok((await bde('POST', '/today/calls', { outcome: 'CALL_BACK', leadId, followUpOn: '2020-01-01' })).status === 400, 'call with a past follow-up date -> 400');
+const totalBefore = (await bde('GET', '/today')).data.total;
+r = await bde('POST', '/today/calls', { outcome: 'CALL_BACK', leadId, note: 'Busy in class' });
+ok(r.status === 201 && r.data.total === totalBefore + 1 && r.data.recent[0].lead?.id === leadId, 'call to a lead counts and names the lead', r.data.recent?.[0]);
+const leadCallId = r.data.recent[0].id;
+r = await bde('GET', `/leads/${leadId}`);
+ok(r.data.lead.stage === 'FOLLOW_UP' && r.data.lead.followUpOn > today && r.data.notes.some(n => n.text === 'Called: Call back later. Busy in class'), 'call moves the lead to Follow-up, tomorrow, with a history line', r.data.lead);
+r = await bde('DELETE', `/today/calls/${leadCallId}`);
+ok(r.status === 200 && r.data.total === totalBefore, 'undo the lead call');
+r = await bde('GET', `/leads/${leadId}`);
+ok(r.data.lead.stage === 'INTERESTED' && r.data.lead.followUpOn === today && r.data.lead.nextAction === 'Call back', 'undo puts the lead back as it was', r.data.lead);
 r = await bde('PATCH', `/leads/${leadId}`, { stage: 'FOLLOW_UP', nextAction: 'Send fee details' });
 ok(r.data.lead.stage === 'FOLLOW_UP', 'change stage');
 ok((await bde('PATCH', `/leads/${leadId}`, { ownerId: 1 })).status === 403, 'BDE cannot reassign');
@@ -148,16 +171,16 @@ ok(!r.data.payments.some(p => p.lead.id === leadId), 'promise closed after payme
 
 console.log('Stats');
 r = await admin('GET', '/stats/dashboard');
-ok(r.status === 200 && r.data.today.calls >= 0 && r.data.today.target > 0 && r.data.month.rows.length >= 30, 'dashboard', r.data.today);
+ok(r.status === 200 && r.data.today.calls >= 0 && r.data.today.target > 0 && r.data.month.rows.length === activeBdes, 'dashboard', r.data.today);
 r = await admin('GET', '/stats/monthly');
 ok(r.data.rows[0].rank === 1 && r.data.totals.revenue > 0, 'monthly ranked', r.data.totals);
 r = await bde('GET', '/stats/monthly');
-ok(r.data.me && r.data.teamSize >= 30 && !r.data.rows, 'BDE gets only own month');
+ok(r.data.me && r.data.teamSize === activeBdes && !r.data.rows, 'BDE gets only own month');
 r = await bde('GET', '/stats/bde/1');
 ok(r.status === 403, "BDE can't see another BDE's stats");
 const myId = (await bde('GET', '/auth/me')).data.user.id;
 r = await bde('GET', `/stats/bde/${myId}`);
-ok(r.status === 200 && r.data.days.length > 0 && r.data.teamAverage.calls > 0, 'my month detail');
+ok(r.status === 200 && r.data.days.length > 0 && typeof r.data.teamAverage.calls === 'number', 'my month detail');
 r = await admin('GET', '/stats/attendance');
 ok(r.status === 200, 'attendance');
 
@@ -256,6 +279,37 @@ const xls = new FormData(); xls.append('ownerId', '1'); xls.append('courseId', '
 ok((await admin('POST', '/leads/import', xls, true)).status === 400, 'old .xls refused with a message');
 ok((await bde('POST', '/leads/import', xls, true)).status === 403, 'BDE cannot import');
 
+console.log('Update from a sheet: new students');
+const sheet = (csvText, commit) => {
+  const f = new FormData();
+  f.append('commit', String(commit));
+  f.append('file', new Blob([csvText], { type: 'text/csv' }), 'update.csv');
+  return bde('POST', '/leads/sheet/upload', f, true);
+};
+const s1 = '7' + String(Math.floor(Math.random() * 1e9)).padStart(9, '0'), s2 = '7' + String(Math.floor(Math.random() * 1e9)).padStart(9, '0');
+const sheetCsv = [
+  'Lead ID,Candidate,Phone,Course,Status,Follow-up date,Next action,Add a note',
+  `,Sheet New One,${s1},Python full-stack,Interested,,Send the fee details,Wants the weekend batch`,
+  `,Sheet New Two,${s2},Data analytics,Not interested,,,Joined elsewhere`,
+  `,Sheet Dup,${s1},Java development,Interested,,,`,
+  `,Sheet Taken,${n1},Java development,Interested,,,`,
+  `,Sheet Bad Course,7${String(Math.floor(Math.random() * 1e9)).padStart(9, '0')},Cooking class,Interested,,,`,
+  `,Sheet New Status,7${String(Math.floor(Math.random() * 1e9)).padStart(9, '0')},Java development,New,,,`
+].join('\n');
+r = await sheet(sheetCsv, false);
+ok(r.status === 200 && r.data.added === 2 && r.data.problems === 4 && r.data.applied === 0, 'sheet preview: 2 new students, 4 refused, nothing saved', r.data);
+const why = r.data.items?.filter(i => i.errors.length).map(i => i.errors[0]).join(' | ') ?? '';
+ok(/earlier in the sheet/.test(why) && /already a lead/.test(why) && /not one of ours/.test(why) && /only for imported/.test(why), 'each refused row says why', why);
+r = await sheet(sheetCsv, true);
+ok(r.data.applied === 2, 'apply adds the 2 new students', r.data);
+r = await bde('GET', `/leads?q=${s1}&view=all`);
+const added = r.data.leads[0];
+ok(added?.stage === 'INTERESTED' && added.owner.employeeId === 'BDE-014' && added.followUpOn > today && added.nextAction === 'Send the fee details', 'new student is Interested, mine, next call tomorrow', added);
+r = await bde('GET', `/leads?q=${s2}&view=all`);
+ok(r.data.leads[0]?.stage === 'NOT_INTERESTED' && r.data.leads[0].followUpOn === null, 'Not interested student has no follow-up', r.data.leads[0]);
+r = await sheet(sheetCsv, false);
+ok(r.data.added === 0, 'uploading the same sheet again adds nobody', r.data);
+
 console.log('Chat');
 const bala = client();
 await bala('POST', '/auth/login', { employeeId: 'BDE-002', password: 'Bde@12345' });
@@ -292,6 +346,32 @@ ok(!r.data.items.some(i => i.detail.includes(word)), 'chat text is not in the lo
 console.log('Logout');
 await bde('POST', '/auth/logout');
 ok((await bde('GET', '/today')).status === 401, 'logged out');
+
+console.log('Clean up');
+{
+  const workDate = new Date(today);
+  const phones = [phone, n1, n2, s1, s2];
+  const made = await db.lead.findMany({ where: { phone: { in: phones } }, select: { id: true, batchId: true } });
+  // Notes, interviews and payments go with the leads
+  await db.lead.deleteMany({ where: { id: { in: made.map(m => m.id) } } });
+  await db.importBatch.deleteMany({ where: { createdAt: { gte: START }, leads: { none: {} } } });
+  const otherId = (await db.user.findUnique({ where: { employeeId: 'BDE-001' } }))?.id ?? 0;
+  const people = [karthikId, balaId, newId, otherId, ...(await db.user.findMany({ where: { role: 'ADMIN' } })).map(u => u.id)];
+  await db.leave.deleteMany({ where: { userId: karthikId, createdAt: { gte: START } } });
+  await db.message.deleteMany({ where: { text: { contains: word } } });
+  await db.notification.deleteMany({ where: { userId: { in: people }, createdAt: { gte: START } } });
+  await db.activity.deleteMany({ where: { userId: { in: people }, createdAt: { gte: START } } });
+  if (!hadAttendance) await db.attendance.deleteMany({ where: { userId: karthikId, workDate } });
+  if (!hadReport) await db.dailyReport.deleteMany({ where: { bdeId: karthikId, workDate } });
+  // The BDE account made by the Team checks
+  try {
+    await db.attendance.deleteMany({ where: { userId: newId } });
+    await db.user.delete({ where: { id: newId } });
+  } catch { console.log('  (the test BDE account was kept: it has other records)'); }
+  const left = await db.lead.count({ where: { phone: { in: phones } } });
+  ok(left === 0, `test leads removed (${made.length})`);
+  await db.$disconnect();
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

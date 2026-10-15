@@ -5,6 +5,7 @@ import { errorText, useLoad, useToast } from '../../lib/hooks';
 import { STAGES, STAGE_LABEL, addDays, rupee, todayIST } from '../../lib/format';
 import { Badge, Due, Empty, ErrorNote, Icons, Loading, Modal } from '../../components/ui';
 import { PageHead } from '../../components/PageHead';
+import { SheetUpdate } from '../../components/SheetUpdate';
 
 type View = 'due' | 'active' | 'all';
 // "Interview scheduled" and "Paid" follow a booking or a verified fee; "New" is for imported numbers not called yet
@@ -14,20 +15,26 @@ export default function Leads() {
   const [params, setParams] = useSearchParams();
   const view = (['due', 'active', 'all'].includes(params.get('view') ?? '') ? params.get('view') : 'active') as View;
   const [q, setQ] = useState('');
-  const { data, error, reload } = useLoad(() => api.leads.list({ view, q: q.trim() || undefined }), [view, q]);
+  const stage = (STAGES as string[]).includes(params.get('stage') ?? '') ? params.get('stage') as Stage : '';
+  const { data, error, reload } = useLoad(() => api.leads.list({ view, stage: stage || undefined, q: q.trim() || undefined }), [view, stage, q]);
   const [adding, setAdding] = useState(params.get('add') === '1');
   const nav = useNavigate();
+  const [updating, setUpdating] = useState(false);
 
   const setView = (v: View) => setParams(p => { p.set('view', v); p.delete('add'); return p; }, { replace: true });
+  const setStage = (s: string) => setParams(p => { if (s) p.set('stage', s); else p.delete('stage'); return p; }, { replace: true });
   const chips: [View, string, number | undefined][] = [
     ['due', 'Call today', data?.counts.due], ['active', 'Active', data?.counts.active],
-    ['all', 'All', data ? Object.values(data.counts.byStage).reduce((a, b) => a + b, 0) : undefined]
+    ['all', 'All', data?.counts.all]
   ];
 
   return (
     <>
       <PageHead title="My leads" sub={data ? `${data.counts.due} to call today, ${data.counts.active} active` : undefined}
-        tools={<button type="button" className="btn" onClick={() => setAdding(true)}>{Icons.plusSm}Add a lead</button>} />
+        tools={<>
+          <button type="button" className="btn ghost" onClick={() => setUpdating(true)}>Update from Excel</button>
+          <button type="button" className="btn" onClick={() => setAdding(true)}>{Icons.plusSm}Add a lead</button>
+        </>} />
       <main className="wrap">
         <section className="panel">
           <div className="toolbar">
@@ -36,6 +43,12 @@ export default function Leads() {
                 <button key={k} type="button" className="chip" aria-pressed={view === k} onClick={() => setView(k)}>{label} {n !== undefined && <b>{n}</b>}</button>
               ))}
             </div>
+            <label className="sr-only" htmlFor="stage">Status</label>
+            <select className="select" id="stage" value={stage} onChange={e => setStage(e.target.value)}>
+              <option value="">Any status</option>
+              {STAGES.map(s => <option key={s} value={s} disabled={!!data && !data.counts.byStage[s] && s !== stage}>{STAGE_LABEL[s]}{data ? ` (${data.counts.byStage[s]})` : ''}</option>)}
+            </select>
+            {stage && <button type="button" className="linkbtn" onClick={() => setStage('')}>Clear</button>}
             <span className="spacer" />
             <label className="sr-only" htmlFor="q">Search my leads</label>
             <input className="input search" id="q" type="search" placeholder="Search name or phone" value={q} onChange={e => setQ(e.target.value)} />
@@ -54,23 +67,24 @@ export default function Leads() {
                       <td className="next-cell" data-label="Next action">{l.nextAction ?? <span className="muted">–</span>}</td>
                     </tr>
                   ))}
-                  {!data.leads.length && <tr><td colSpan={5}><Empty title={view === 'due' ? 'Nothing due right now' : 'No leads here'}>{view === 'due' ? '' : 'Use "Add a lead" to add a candidate.'}</Empty></td></tr>}
+                  {!data.leads.length && <tr><td colSpan={5}><Empty title={stage ? `No ${STAGE_LABEL[stage].toLowerCase()} leads here` : view === 'due' ? 'Nothing due right now' : 'No leads here'}>{view === 'due' ? '' : 'Use "Add a lead" to add a candidate.'}</Empty></td></tr>}
                 </tbody>
               </table>
             </div>
           )}
         </section>
       </main>
-      <AddLead open={adding} onClose={() => { setAdding(false); if (params.get('add')) setParams(p => { p.delete('add'); return p; }, { replace: true }); }} onAdded={reload} />
+      <SheetUpdate open={updating} onClose={() => setUpdating(false)} onDone={() => { setUpdating(false); void reload(); }} />
+      <AddLead open={adding} phone={params.get('phone') ?? ''} onClose={() => { setAdding(false); if (params.get('add')) setParams(p => { p.delete('add'); p.delete('phone'); return p; }, { replace: true }); }} onAdded={reload} />
     </>
   );
 }
 
-function AddLead({ open, onClose, onAdded }: { open: boolean; onClose: () => void; onAdded: () => void }) {
+function AddLead({ open, phone, onClose, onAdded }: { open: boolean; phone: string; onClose: () => void; onAdded: () => void }) {
   const toast = useToast();
   const nav = useNavigate();
   const courses = useLoad(() => api.courses.list());
-  const [f, setF] = useState({ name: '', phone: '', courseId: '', stage: 'INTERESTED' as Stage, followUpOn: addDays(todayIST(), 1), nextAction: '' });
+  const [f, setF] = useState({ name: '', phone, courseId: '', stage: 'INTERESTED' as Stage, followUpOn: addDays(todayIST(), 1), nextAction: '' });
   const [err, setErr] = useState('');
   const [dupId, setDupId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);

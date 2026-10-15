@@ -175,7 +175,7 @@ Run the web app with `npm run dev -- --host` in `web/`, then open the "Network" 
 | Where | Command | What it does |
 |---|---|---|
 | server | `npm run dev` | API with auto-restart on code changes |
-| server | `npm run check:api` | Tests every API flow (107 checks). **Development database only**: it adds test records. |
+| server | `npm run check:api` | Tests every API flow (122 checks). **Development database only**: it adds test records and removes them at the end. |
 | server | `npm run typecheck` | Checks the TypeScript |
 | server | `npm run db:migrate` | After changing `prisma/schema.prisma`: creates a migration and applies it |
 | server | `npx prisma studio` | Browse and edit the database in the browser |

@@ -119,3 +119,28 @@ Chat now works like the company workspace: **#general**, **#team** and **announc
 | API checks | 105/109 (the same 4 BDE-001 password checks) |
 
 Found while testing: a malformed id in an address (e.g. `/leaves/abc/approve`) gave a 500 server error. It now answers 404 "Item not found". Added an API check for it.
+
+## Bulk update and assigning, 15 Oct 2026
+
+| What | How it was checked | Result |
+|---|---|---|
+| Today: fast taps on the call buttons | 15 taps in a row in the browser | All 15 counted |
+| Import by availability, equally, to one BDE, and a "BDE ID" column | API checks and browser | Pass; BDEs on leave are skipped |
+| Leads > Imports: progress per import and per BDE, See leads | Browser | Pass |
+| Update from Excel (BDE and admin): download, preview, apply | API checks (refused rows: past date, Paid without fees, other BDE's lead, duplicate row) and browser | Pass |
+| Assign leads: compare BDEs, tick the suggested 3, give students | Browser (3 students went to 3 BDEs in turn) and API | Pass |
+
+Regression after these changes: browser click-through 30/30, feature checks all pass, API checks 105 pass (the same 4 BDE-001 password checks fail). Production build OK.
+A trial "Calling" page was built and then removed on 15 Oct. Instead, Today now has the call list: pick the student, then how the call went.
+
+| What | How it was checked | Result |
+|---|---|---|
+| Pick a student, tap Call back later | Browser as BDE-014 | Counted once, student leaves the list, follow-up moves to tomorrow, history line written, next student picked |
+| Undo that call | Browser and API | Count back, student restored (status, follow-up, next action), "Call undone" in history |
+| ↑ to New number, press 4 five times fast | Browser | All 5 counted |
+| New number, Interested | Browser | "Add them as a lead" opens with the number filled in |
+| Phone width 390px | Browser | Buttons in two rows, no sideways scroll |
+| Bug found and fixed | The student was updated but the call failed to save (the running server had the old database client). The two writes are now one transaction. | Fixed |
+New database changes: migrations `0004_call_lead`, `0005_import_batches`, `0006_call_undo` and `0007_note_source` (marks where each history line came from; existing lines are labelled by the migration).
+
+History sources (15 Oct): an Excel note-only upload showed in Today's history tagged "Excel", calls tagged "Call list", and the student's history line tagged "Excel". Click-through 30/30, API 116 passed (the same 5 BDE-001 failures). Teammates run `npm run db:deploy` after pulling.

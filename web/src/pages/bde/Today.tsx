@@ -1,18 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, type Outcome, type Today as TodayData } from '../../api';
+import { api, type Today as TodayData } from '../../api';
 import { useAuth } from '../../lib/auth';
 import { errorText, useLoad, useToast } from '../../lib/hooks';
-import { OUTCOMES, OUTCOME_CLASS, OUTCOME_COLOR, OUTCOME_LABEL, fmtDate, fmtTime } from '../../lib/format';
-import { Empty, ErrorNote, Loading, StatStrip } from '../../components/ui';
+import { OUTCOMES, OUTCOME_COLOR, OUTCOME_LABEL, fmtDate, fmtTime } from '../../lib/format';
+import { Empty, ErrorNote, Loading, SourceTag, StatStrip } from '../../components/ui';
 import { PageHead } from '../../components/PageHead';
+import { CallList } from './CallList';
 
 export default function Today() {
   const { user } = useAuth();
   const toast = useToast();
   const { data, setData, error, reload } = useLoad(() => api.today.get());
   const [busy, setBusy] = useState(false);
-  const [lastWasInterested, setLastWasInterested] = useState(false);
+  const [refresh, setRefresh] = useState(0); // read the call list again after an undo
   const [note, setNote] = useState('');
 
   async function act(fn: () => Promise<TodayData>, msg?: string) {
@@ -27,27 +28,7 @@ export default function Today() {
       setBusy(false);
     }
   }
-  const log = (o: Outcome) => {
-    setLastWasInterested(o === 'INTERESTED');
-    navigator.vibrate?.(12);
-    return act(() => api.today.logCall(o), `Logged: ${OUTCOME_LABEL[o]}`);
-  };
-
-  // Keys 1 to 4 log a call, so a BDE on a headset at a laptop doesn't need the mouse
-  const logRef = useRef(log);
-  logRef.current = log;
   const sent = !!data?.submittedAt;
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement;
-      if (sent || e.ctrlKey || e.metaKey || e.altKey || el.closest('input, textarea, select, dialog[open]')) return;
-      const i = ['1', '2', '3', '4'].indexOf(e.key);
-      if (i >= 0) { e.preventDefault(); void logRef.current(OUTCOMES[i]); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [sent]);
-
   if (error) return <main className="wrap"><ErrorNote error={error} onRetry={reload} /></main>;
   if (!data) return <main className="wrap"><Loading /></main>;
 
@@ -73,32 +54,28 @@ export default function Today() {
         {data.onLeave && !data.punchIn && <div className="notice" role="status">You're on approved leave today. If you work anyway, your calls still count.</div>}
         <div className="row">
           <div className="grow col">
-            <section className="panel" aria-label="Log a call">
-              <div className="panel-head"><h2>Log a call</h2><span className="small muted keys-hint">Tip: press 1, 2, 3 or 4</span></div>
-              <div className="panel-pad">
-                <div className="pad">
-                  {OUTCOMES.map((o, i) => (
-                    <button key={o} type="button" className={OUTCOME_CLASS[o]} disabled={sent || busy} onClick={() => log(o)}
-                      aria-label={`Log one ${OUTCOME_LABEL[o].toLowerCase()} call`} aria-keyshortcuts={String(i + 1)}>
-                      <span className="lbl">{OUTCOME_LABEL[o]}<kbd>{i + 1}</kbd></span><span className="n">{data.counts[o]}</span>
-                    </button>
-                  ))}
-                </div>
-                {lastWasInterested && !sent && <p className="small" style={{ marginTop: 12 }}>Interested? <Link to="/bde/leads?add=1">Add them as a lead</Link></p>}
-                {sent && <p className="small muted" style={{ marginTop: 12 }}>The report is sent, so calls are locked. Use "Make a correction" to change them.</p>}
+            <CallList sent={sent} onDay={setData} refresh={refresh} />
+            <section className="panel" aria-label="Today's history">
+              <div className="panel-head"><h2>Today's history</h2><span className="small muted">{OUTCOMES.map(o => `${data.counts[o]} ${OUTCOME_LABEL[o].toLowerCase()}`).join(', ')}</span></div>
+              <div className="history-list">
+                {data.history.map(h => h.kind === 'CALL' && h.outcome ? (
+                  <div className="log-row" key={`c${h.id}`}>
+                    <span className="dot" style={{ background: OUTCOME_COLOR[h.outcome] }} />
+                    <span className="t">{fmtTime(h.at)}</span>
+                    <span className="what">{h.lead ? <><Link to={`/bde/leads/${h.lead.id}`}>{h.lead.name}</Link>: </> : 'New number: '}{OUTCOME_LABEL[h.outcome]}</span>
+                    <SourceTag source="CALL" />
+                    {!sent && <button type="button" className="linkbtn" disabled={busy} onClick={() => act(() => api.today.undoCall(h.id), h.lead ? `Undone: ${h.lead.name}, ${OUTCOME_LABEL[h.outcome!]}` : `Removed one "${OUTCOME_LABEL[h.outcome!]}"`).then(() => setRefresh(n => n + 1))}>Undo</button>}
+                  </div>
+                ) : (
+                  <div className="log-row" key={`s${h.id}`}>
+                    <span className="dot sheet-dot" />
+                    <span className="t">{fmtTime(h.at)}</span>
+                    <span className="what">{h.lead && <><Link to={`/bde/leads/${h.lead.id}`}>{h.lead.name}</Link>: </>}<span className="sheet-lines">{h.lines.join('; ')}</span></span>
+                    <SourceTag source="SHEET" />
+                  </div>
+                ))}
               </div>
-            </section>
-            <section className="panel" aria-label="Recent calls">
-              <div className="panel-head"><h2>Last calls</h2><span className="small muted">Undo a wrong tap</span></div>
-              {data.recent.map(c => (
-                <div className="log-row" key={c.id}>
-                  <span className="dot" style={{ background: OUTCOME_COLOR[c.outcome] }} />
-                  <span className="t">{fmtTime(c.calledAt)}</span>
-                  <span className="what">{OUTCOME_LABEL[c.outcome]}</span>
-                  {!sent && <button type="button" className="linkbtn" disabled={busy} onClick={() => act(() => api.today.undoCall(c.id), `Removed one "${OUTCOME_LABEL[c.outcome]}"`)}>Undo</button>}
-                </div>
-              ))}
-              {!data.recent.length && <Empty title="No calls yet">Calls you log appear here so you can fix a wrong tap.</Empty>}
+              {!data.history.length && <Empty title="Nothing yet today">Calls you log and changes from Excel appear here, marked "Call list" or "Excel". Undo puts a wrong call right and the student back as they were.</Empty>}
             </section>
           </div>
 
