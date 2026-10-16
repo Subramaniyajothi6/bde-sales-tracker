@@ -2,8 +2,9 @@ import { createReadStream } from 'node:fs';
 import { mkdir, writeFile, access } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import type { Readable } from 'node:stream';
+import { Readable } from 'node:stream';
 import { env } from './env.js';
+import { db } from './db.js';
 
 /**
  * Where receipt files live. The app only talks to this interface, so moving
@@ -15,13 +16,18 @@ export interface FileStorage {
   read(key: string): Promise<Readable>;
 }
 
+/** A new key like receipts/2026/10/<uuid>.png */
+function newKey(originalName: string) {
+  const ext = path.extname(originalName).toLowerCase().replace(/[^.a-z0-9]/g, '').slice(0, 6);
+  const now = new Date();
+  return `receipts/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/${randomUUID()}${ext}`;
+}
+
 class LocalStorage implements FileStorage {
   private root = path.resolve(env.UPLOAD_DIR);
 
   async save(data: Buffer, originalName: string) {
-    const ext = path.extname(originalName).toLowerCase().replace(/[^.a-z0-9]/g, '').slice(0, 6);
-    const now = new Date();
-    const key = `receipts/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/${randomUUID()}${ext}`;
+    const key = newKey(originalName);
     const full = this.resolve(key);
     await mkdir(path.dirname(full), { recursive: true });
     await writeFile(full, data);
@@ -42,4 +48,19 @@ class LocalStorage implements FileStorage {
   }
 }
 
-export const storage: FileStorage = new LocalStorage();
+/** Files kept in MySQL, for free hosts (e.g. Render) whose disk is wiped on every restart. */
+class DbStorage implements FileStorage {
+  async save(data: Buffer, originalName: string) {
+    const key = newKey(originalName);
+    await db.storedFile.create({ data: { key, data: new Uint8Array(data) } });
+    return key;
+  }
+
+  async read(key: string) {
+    const file = await db.storedFile.findUnique({ where: { key } });
+    if (!file) throw new Error('Receipt file is missing');
+    return Readable.from([Buffer.from(file.data)]);
+  }
+}
+
+export const storage: FileStorage = env.STORAGE_DRIVER === 'db' ? new DbStorage() : new LocalStorage();

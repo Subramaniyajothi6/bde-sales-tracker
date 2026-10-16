@@ -1,0 +1,31 @@
+# Render "Blueprint": the free live app. See docs/DEPLOY.md, "Free: Render + Aiven".
+# One web service builds the web pages and the API, and the API serves both.
+services:
+  - type: web
+    name: bde-tracker
+    runtime: node
+    plan: free
+    region: singapore          # nearest Render region to India
+    # --include=dev: the build needs TypeScript, Vite and the Prisma tool, even with NODE_ENV=production
+    buildCommand: >-
+      cd web && npm ci --include=dev && npm run build &&
+      cd ../server && npm ci --include=dev && npx prisma generate && npm run build
+    # Database changes (prisma/migrations) are applied on every start, so pushing a new migration is enough
+    startCommand: cd server && npx prisma migrate deploy && node dist/index.js
+    healthCheckPath: /api/health
+    autoDeploy: true           # every push to main goes live
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL      # from Aiven, typed in the Render dashboard
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: STORAGE_DRIVER    # Render's free disk is wiped on restart, so receipts go in MySQL
+        value: db
+      - key: REPORT_CUTOFF
+        value: "19:30"
+      - key: LATE_AFTER
+        value: "10:00"

@@ -2,5 +2,7 @@ node_modules/
 dist/
 uploads/
 .env
+.env.*
+!.env.example
 *.log
 prisma/setup-local-db.sql

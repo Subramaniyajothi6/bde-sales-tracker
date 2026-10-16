@@ -25,6 +25,38 @@ Several providers offer free plans for a small Node.js app and a small MySQL dat
 - Servers whose disk is wiped on restart. Receipts would be lost, so on those, add cloud storage for receipts first (see "Receipt storage").
 - Database size limits. This app's data is small; receipts are the big part and don't go in the database.
 
+### Option B in practice: Render + Aiven (no credit card)
+
+This is how the app runs live for now. Everything is set in [`render.yaml`](../render.yaml).
+
+| Part | Service | Free plan notes |
+|---|---|---|
+| App (web pages + API) | [Render](https://render.com) web service, Singapore | Sleeps after about 15 minutes with no visitors; the next visit takes about a minute to wake it. Its disk is wiped on every restart. |
+| Database | [Aiven](https://aiven.io) MySQL 8, free plan | Small (about 1 GB), plenty for this app. |
+| Receipts | Inside the database (`STORAGE_DRIVER=db`) | Because Render's disk is wiped. Uploads are at most 5 MB each. |
+
+**Set up once**
+
+1. **Aiven:** sign up, create a **MySQL** service on the **Free** plan, nearest region. When it is running, copy the **Service URI** and download the **CA certificate**.
+2. Save the CA certificate as `server/prisma/aiven-ca.pem` and commit it. It is public, not a secret.
+3. Make the app's database address from the Service URI: replace `?ssl-mode=REQUIRED` at the end with `?sslcert=aiven-ca.pem&sslaccept=strict`:
+   `mysql://avnadmin:<password>@<host>:<port>/defaultdb?sslcert=aiven-ca.pem&sslaccept=strict`
+4. **Render:** sign up with GitHub, **New > Blueprint**, pick this repository. It reads `render.yaml` and asks for `DATABASE_URL`: paste the address from step 3. The first build takes a few minutes; when the app starts it creates the tables. The app is then at `https://<name>.onrender.com`.
+5. **Create the admin account and the courses** from your own computer. Put these in `server/.env.production` (git ignores it): `DATABASE_URL` (from step 3), `JWT_SECRET` (any 32+ characters), `SEED_ADMIN_PASSWORD` (a strong one) and `SEED_SAMPLE_DATA=false`. Then in `server/`:
+
+   ```powershell
+   npx tsx --env-file=.env.production prisma/seed.ts
+   ```
+
+6. Sign in as `ADMIN-01` with the seed password and change it at once. Add the BDEs under **Team**.
+
+**After that:** every push to `main` goes live by itself. New database changes in `server/prisma/migrations` are applied when the app starts.
+
+**Keeping it awake (optional):** a free monitor such as UptimeRobot opening `https://<name>.onrender.com/api/health` every 5 minutes stops it sleeping during office hours.
+
+**Backups:** Aiven's free plan has no backups to rely on. Once a week, from your computer:
+`mysqldump -h <host> -P <port> -u avnadmin -p --ssl-mode=REQUIRED --single-transaction defaultdb > bde-live-<date>.sql`
+
 ## Stage 2: paid domain and server, later
 
 1. **Buy the domain** (e.g. `adz4needz.com`) and point a sub-address like `crm.adz4needz.com` at the server.

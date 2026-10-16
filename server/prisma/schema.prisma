@@ -386,6 +386,15 @@ model Notification {
   @@index([userId, readAt])
 }
 
+/// A receipt file kept in the database (STORAGE_DRIVER=db), for hosts whose disk is wiped on restart.
+model StoredFile {
+  /// Same key the folder storage would use, e.g. receipts/2026/10/<uuid>.png
+  key       String   @id @db.VarChar(200)
+  /// Uploads are at most 5 MB
+  data      Bytes    @db.MediumBlob
+  createdAt DateTime @default(now())
+}
+
 /// One bulk import of students by the admin. Its leads are tracked together on the Leads page.
 model ImportBatch {
   id          Int      @id @default(autoincrement())

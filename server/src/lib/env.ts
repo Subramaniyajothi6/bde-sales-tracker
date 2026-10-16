@@ -8,7 +8,8 @@ const schema = z.object({
   PORT: z.coerce.number().default(4000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   WEB_ORIGIN: z.string().optional(),
-  STORAGE_DRIVER: z.enum(['local']).default('local'),
+  /** local = a folder on this server; db = inside MySQL (for hosts whose disk is wiped on restart) */
+  STORAGE_DRIVER: z.enum(['local', 'db']).default('local'),
   UPLOAD_DIR: z.string().default('./uploads'),
   REPORT_CUTOFF: z.string().regex(/^\d{2}:\d{2}$/).default('19:30'),
   /** Punching in after this time (India time) counts as late */
