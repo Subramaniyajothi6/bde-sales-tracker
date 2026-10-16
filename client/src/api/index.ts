@@ -12,7 +12,7 @@ export type InterviewResult = 'SELECTED' | 'NOT_SELECTED';
 export type PaymentStatus = 'PROMISED' | 'PARTIALLY_PAID' | 'PAID';
 export type ReceiptCheck = 'TO_VERIFY' | 'VERIFIED' | 'REJECTED';
 export type ReportStatus = 'SENT' | 'NOT_SENT' | 'CALLING' | 'NOT_STARTED' | 'ON_LEAVE';
-export type DayStatus = 'PRESENT' | 'LATE' | 'LEAVE' | 'ABSENT' | 'NOT_IN' | 'OFF' | 'UPCOMING';
+export type DayStatus = 'PRESENT' | 'LATE' | 'LEAVE' | 'ABSENT' | 'NOT_IN' | 'OFF' | 'UPCOMING' | 'NOT_JOINED';
 export type LeaveType = 'CASUAL' | 'SICK' | 'EMERGENCY' | 'OTHER';
 export type LeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 

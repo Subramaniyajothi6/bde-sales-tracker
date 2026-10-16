@@ -18,7 +18,7 @@ Everything the web app can ask the server for. Any frontend design (Direction H 
 | Payment `status` | `PROMISED`, `PARTIALLY_PAID`, `PAID` |
 | Receipt `check` | `TO_VERIFY`, `VERIFIED`, `REJECTED` (null for promises) |
 | Daily report `status` | `SENT`, `NOT_SENT`, `CALLING`, `NOT_STARTED`, `ON_LEAVE` |
-| Attendance day `status` | `PRESENT`, `LATE`, `LEAVE`, `ABSENT`, `NOT_IN` (today, not started yet), `OFF` (Sunday), `UPCOMING` |
+| Attendance day `status` | `PRESENT`, `LATE`, `LEAVE`, `ABSENT`, `NOT_IN` (today, not started yet), `OFF` (Sunday), `UPCOMING`, `NOT_JOINED` (before the joining date) |
 | Leave `type` / `status` | `CASUAL`, `SICK`, `EMERGENCY`, `OTHER` / `PENDING`, `APPROVED`, `REJECTED`, `CANCELLED` |
 
 The frontend turns these into words on screen (e.g. `NO_SHOW` → "Missed").

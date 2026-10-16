@@ -256,7 +256,7 @@ exportsRouter.get('/report.xlsx', async (req, res) => {
 /** Letter shown in each day cell, and its colour */
 const DAY: Record<DayStatus, [string, Tone | null]> = {
   PRESENT: ['P', 'green'], LATE: ['L', 'amber'], LEAVE: ['LV', 'violet'], ABSENT: ['A', 'red'],
-  NOT_IN: ['–', null], OFF: ['–', 'grey'], UPCOMING: ['', null]
+  NOT_IN: ['–', null], OFF: ['–', 'grey'], UPCOMING: ['', null], NOT_JOINED: ['', null]
 };
 
 exportsRouter.get('/attendance.xlsx', async (req, res) => {

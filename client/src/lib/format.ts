@@ -20,7 +20,7 @@ export const LEAVE_STATUS_LABEL: Record<LeaveStatus, string> = { PENDING: 'Waiti
 /** Attendance: word, and the short letter used in the month grid */
 export const DAY_LABEL: Record<DayStatus, [string, string]> = {
   PRESENT: ['Present', 'P'], LATE: ['Late', 'L'], LEAVE: ['Leave', 'LV'], ABSENT: ['Absent', 'A'],
-  NOT_IN: ['Not in yet', '·'], OFF: ['Sunday', ''], UPCOMING: ['', '']
+  NOT_IN: ['Not in yet', '·'], OFF: ['Sunday', ''], UPCOMING: ['', ''], NOT_JOINED: ['Not joined yet', '']
 };
 
 /** CSS class for a badge, e.g. "Payment committed" -> s-payment-committed (styles in base.css). */

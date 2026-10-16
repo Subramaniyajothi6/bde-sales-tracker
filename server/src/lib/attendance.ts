@@ -7,9 +7,9 @@ import { addDays, dateOnly, istInstant, todayIST, ymd } from './time.js';
  *  - punch in / punch out (Attendance rows; punch out happens when the day's report is sent),
  *  - approved leave,
  *  - logged calls (a day with calls but no punch-in still counts as present, e.g. data from before punching existed).
- * Sunday is the weekly off. Rules are in docs/DECISIONS.md.
+ * Sunday is the weekly off. Days before the BDE's joining date are not counted. Rules are in docs/DECISIONS.md.
  */
-export type DayStatus = 'PRESENT' | 'LATE' | 'LEAVE' | 'ABSENT' | 'NOT_IN' | 'OFF' | 'UPCOMING';
+export type DayStatus = 'PRESENT' | 'LATE' | 'LEAVE' | 'ABSENT' | 'NOT_IN' | 'OFF' | 'UPCOMING' | 'NOT_JOINED';
 
 export interface DayCell {
   date: string;
@@ -50,13 +50,15 @@ export async function leaveDays(from: string, to: string, userIds?: number[]) {
 export async function attendanceGrid(userIds: number[], from: string, to: string) {
   const today = todayIST();
   const range = { gte: dateOnly(from), lte: dateOnly(to) };
-  const [rows, leave, callDays] = await Promise.all([
+  const [rows, leave, callDays, users] = await Promise.all([
     db.attendance.findMany({ where: { userId: { in: userIds }, workDate: range } }),
     leaveDays(from, to, userIds),
-    db.callLog.groupBy({ by: ['bdeId', 'workDate'], where: { bdeId: { in: userIds }, workDate: range } })
+    db.callLog.groupBy({ by: ['bdeId', 'workDate'], where: { bdeId: { in: userIds }, workDate: range } }),
+    db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, joinedOn: true } })
   ]);
   const punched = new Map(rows.map(r => [`${r.userId}|${ymd(r.workDate)}`, r]));
   const called = new Set(callDays.map(c => `${c.bdeId}|${ymd(c.workDate)}`));
+  const joined = new Map(users.map(u => [u.id, ymd(u.joinedOn)]));
 
   const dates: string[] = [];
   for (let d = from; d <= to; d = addDays(d, 1)) dates.push(d);
@@ -73,6 +75,7 @@ export async function attendanceGrid(userIds: number[], from: string, to: string
       else if (called.has(key)) status = 'PRESENT';
       else if (leave.has(key)) status = 'LEAVE';
       else if (date > today) status = 'UPCOMING';
+      else if (date < (joined.get(id) ?? '')) status = 'NOT_JOINED';
       else if (dateOnly(date).getUTCDay() === 0) status = 'OFF';
       else if (date === today) status = 'NOT_IN';
       else status = 'ABSENT';
