@@ -9,11 +9,11 @@ Everything here is free and open source. Moving to a paid server and domain late
 ```
 bde-sales-tracker/
   server/   API: Node.js + Express + TypeScript, Prisma, MySQL
-  web/      Screens: React + Vite (Direction H "Minimal" design)
+  client/   Screens: React + Vite (Direction H "Minimal" design)
   docs/     DECISIONS.md (business rules), API.md (every endpoint), DEPLOY.md
 ```
 
-The web app only talks to the server through `web/src/api/`. A new design can replace `web/src/pages` and `web/src/styles` and keep working against the same server and data.
+The web app only talks to the server through `client/src/api/`. A new design can replace `client/src/pages` and `client/src/styles` and keep working against the same server and data.
 
 | Part | Libraries (all open source) |
 |---|---|
@@ -111,7 +111,7 @@ npm run db:seed        # creates ADMIN-01, the courses, and sample data if switc
 Then the web app:
 
 ```powershell
-cd ..\web              # Mac/Linux: cd ../web
+cd ..\client           # Mac/Linux: cd ../client
 npm install
 ```
 
@@ -127,7 +127,7 @@ npm run dev            # API on http://localhost:4000
 
 ```powershell
 # Terminal 2
-cd web
+cd client
 npm run dev            # app on http://localhost:5173
 ```
 
@@ -146,7 +146,7 @@ Open **http://localhost:5173**.
 
 ### On a phone
 
-Run the web app with `npm run dev -- --host` in `web/`, then open the "Network" address it prints (like `http://192.168.1.20:5173`) on a phone connected to the same Wi-Fi. Allow Node.js through Windows Firewall if asked.
+Run the web app with `npm run dev -- --host` in `client/`, then open the "Network" address it prints (like `http://192.168.1.20:5173`) on a phone connected to the same Wi-Fi. Allow Node.js through Windows Firewall if asked.
 
 ### Working together
 
@@ -179,12 +179,12 @@ Run the web app with `npm run dev -- --host` in `web/`, then open the "Network" 
 | server | `npm run typecheck` | Checks the TypeScript |
 | server | `npm run db:migrate` | After changing `prisma/schema.prisma`: creates a migration and applies it |
 | server | `npx prisma studio` | Browse and edit the database in the browser |
-| web | `npm run build` | Production build into `web/dist` (the server serves it) |
+| client | `npm run build` | Production build into `client/dist` (the server serves it) |
 
 ## Changing things safely
 
-- **Wording on screen** (e.g. status names): `web/src/lib/format.ts`.
-- **Colours, fonts, spacing**: `web/src/styles/base.css` (the `:root` variables at the top).
+- **Wording on screen** (e.g. status names): `client/src/lib/format.ts`.
+- **Colours, fonts, spacing**: `client/src/styles/base.css` (the `:root` variables at the top).
 - **Business rules** (what counts as revenue, who can do what): the server, in `server/src/routes/`. Update `docs/DECISIONS.md` too.
 - **Database changes**: edit `server/prisma/schema.prisma`, run `npm run db:migrate`, and commit the new folder in `prisma/migrations`.
 

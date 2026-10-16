@@ -1,5 +1,5 @@
 {
-  "name": "bde-tracker-web",
+  "name": "bde-tracker-client",
   "version": "0.1.0",
   "private": true,
   "description": "Web app (Direction H design) for the ADZ4NEEDZ BDE Team Management & Sales Tracking app",

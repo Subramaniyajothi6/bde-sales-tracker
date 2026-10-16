@@ -8,7 +8,7 @@ The app is one Node.js server that also serves the web pages, plus a MySQL datab
 A PC that stays on during working hours runs MySQL and the app. BDEs open it on office Wi-Fi.
 
 ```bash
-cd web && npm run build
+cd client && npm run build
 cd ../server && npm run build && npm start      # serves app + API on port 4000
 ```
 
@@ -75,7 +75,7 @@ This is how the app runs live for now. Everything is set in [`render.yaml`](../r
 4. **Build and start:**
 
    ```bash
-   cd web && npm ci && npm run build
+   cd client && npm ci && npm run build
    cd ../server && npm ci && npm run build && npm run db:deploy && npm run db:seed
    npm start          # keep it running with a process manager such as pm2 or systemd
    ```

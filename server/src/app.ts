@@ -86,7 +86,7 @@ export function createApp() {
   app.use('/api', () => { throw new HttpError(404, 'No such API endpoint'); });
 
   // In production the built web app is served from here too: one server, one address
-  const webDist = path.resolve(env.WEB_DIST ?? '../web/dist');
+  const webDist = path.resolve(env.WEB_DIST ?? '../client/dist');
   if (existsSync(webDist)) {
     app.use(express.static(webDist, { index: false, maxAge: '1h' }));
     app.get(/^(?!\/api).*/, (_req, res) => res.sendFile(path.join(webDist, 'index.html')));
